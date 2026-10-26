@@ -22,6 +22,8 @@ const plan={schemaVersion:1,goal:'实现需求',decisions:'纯代码阶段精简
 let compiled=compileAdaptivePlan(plan,{workflow:seed},bundle);assert.equal(compiled.nodeConfigs.build.runtimeContext,'focused');assert.equal(compiled.nodeConfigs.integrate.runtimeContext,'inherit');assert.equal(compiled.workflow.nodes.find(n=>n.id==='build').runtimeContext,'focused');assert.equal(bundle.nodeConfigs.plan.runtimeContext,undefined);
 compiled=compileAdaptivePlan(plan,{workflow:{...seed,runtimeContext:'inherit'}},bundle);assert.equal(compiled.nodeConfigs.build.runtimeContext,'inherit');
 assert(planningInstructions(bundle.teamProfiles,seed).includes('runtimeContext='));
+assert(planningInstructions(bundle.teamProfiles,{...seed,runtimeContext:'inherit'}).includes('项目固定 runtimeContext=inherit'));
+assert(planningInstructions(bundle.teamProfiles,{...seed,runtimeContext:'focused'}).includes('只分配给目录声明支持 focused'));
 const policy={budgetSeconds:300,fallbackProfile:'codex-seoul'},focused=compileRuntimeContext(primary,{runtimeContext:'focused'}),fallback=compileExecutionPolicy(focused,{executionPolicy:policy},seed,bundle.teamProfiles);assert.equal(fallback.fallbackConfig.runtimeContext,'focused');
 let received=[];const server=http.createServer(async(req,res)=>{received.push(JSON.parse(Buffer.concat(await Array.fromAsync(req)).toString()));res.setHeader('Content-Type','application/json');res.end(JSON.stringify({id:'fixture',execution_status:'running'}))});server.listen(0,'127.0.0.1');await once(server,'listening');
 try{
