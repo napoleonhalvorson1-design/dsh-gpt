@@ -111,3 +111,7 @@ DeepSeek 在任何模式及手动覆盖下均固定 **DeepSeek V4.1 Flash + max*
 先查 profiles 的 executionFeatures.runtimeContextModes。负责人可为纯文件、终端开发阶段写 runtimeContext="focused"；需要 App、插件或相关技能的阶段使用 inherit，不确定时继承，不能为省上下文降低任务能力。只有配置探针确认的 Codex 入口支持 focused；DeepSeek、Claude 继续原环境。项目显式 runtimeContext 优先于 AI 阶段提议，preset 输入也保留它，未设置和历史运行不变。
 
 focused 限该次 Codex ACP 子进程的 App、插件及技能目录，保留模型、思考深度、原生文件/终端、账号和托管要求；需要外部能力时选择 inherit。配置不写入用户全局文件，不重启共享手机 Codex 服务。模式随运行冻结，备用和续跑保留相应配置；runtimeContextRequested 只说明请求设置，不能据此宣称实际模型 token 已下降或整体快 11 倍。
+
+## 并发补同步（5.15 / 插件 2.14）
+
+后台按独立项目与运行并发保存数据，空闲最多 16、有开发运行最多 4；单根失败继续处理其他根。同一任务内部的写入顺序和阶段桶屏障保留。查看 storage_status 的 lastSyncBatch 计数和失败根 kind/id；它不是 S3 请求数，lastSync 只表示完整成功。恢复只补缺失确认，不重跑已完成 AI。操作边界见 [同步说明](references/storage-sync.md)。
