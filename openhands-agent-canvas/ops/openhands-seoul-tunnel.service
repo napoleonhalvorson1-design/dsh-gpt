@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenHands private Agent Server bridge to Seoul
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -NT -i /etc/openhands-canvas/ssh/seoul_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/openhands-canvas/ssh/known_hosts -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L 127.0.0.1:18084:127.0.0.1:18181 ubuntu@43.128.144.115
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

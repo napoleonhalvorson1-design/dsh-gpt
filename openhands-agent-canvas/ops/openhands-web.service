@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenHands Canvas password-protected web gateway
+After=network-online.target openhands-control.service
+Wants=network-online.target openhands-control.service
+[Service]
+Type=simple
+User=openhands-web
+Group=openhands-web
+WorkingDirectory=/opt/openhands-control
+EnvironmentFile=/etc/openhands-control/web.env
+Environment=NODE_NO_WARNINGS=1
+ExecStart=/opt/openhands-control/node /opt/openhands-control/server/web.mjs
+Restart=always
+RestartSec=3
+UMask=0077
+MemoryMax=192M
+TasksMax=48
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+[Install]
+WantedBy=multi-user.target

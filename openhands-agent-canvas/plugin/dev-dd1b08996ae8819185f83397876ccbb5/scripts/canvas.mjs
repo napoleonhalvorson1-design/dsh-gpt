@@ -1,0 +1,52 @@
+#!/usr/bin/env node
+import {readFile,writeFile,mkdir,chmod,unlink} from 'node:fs/promises';
+import {createWriteStream} from 'node:fs';
+import {homedir} from 'node:os';
+import {join,resolve,dirname} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {Readable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
+import readline from 'node:readline/promises';
+const args=process.argv.slice(2),command=args.shift(),action=args.shift();
+function flag(name,fallback){const i=args.indexOf('--'+name);return i>=0?args[i+1]:fallback}
+const configPath=process.env.CANVAS_CREDENTIALS_FILE||join(homedir(),'.config','openhands-canvas','credentials.json');
+const output=value=>process.stdout.write(JSON.stringify(value,null,2)+'\n');
+const stdin=async()=>{let text='';for await(const chunk of process.stdin)text+=chunk;return text};
+function siteUrl(value){const u=new URL(value);if(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname)))throw Error('网站地址必须使用 HTTPS。');if(u.username||u.password||u.search||u.hash)throw Error('网站地址不能包含凭据、查询或片段。');return u.origin}
+async function credentials(){let saved={};try{saved=JSON.parse(await readFile(configPath,'utf8'))}catch{}const url=process.env.OPENHANDS_CANVAS_URL||saved.url,token=process.env.OPENHANDS_CANVAS_TOKEN||saved.token;if(!url||!token)throw Error('请先运行 canvas login，或设置 OPENHANDS_CANVAS_URL 和 OPENHANDS_CANVAS_TOKEN。');return {url:siteUrl(url),token}}
+async function request(path,{method='GET',body,raw=false,auth}={}){const c=auth||await credentials(),r=await fetch(c.url+'/api'+path,{method,headers:{Authorization:'Bearer '+c.token,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(raw?120000:35000),...(body?{body:JSON.stringify(body)}:{})});if(raw&&r.ok)return r;let data;try{data=await r.json()}catch{throw Error('服务返回异常，请检查网站地址。')}if(!r.ok)throw Error(`${r.status}: ${data.error||'操作失败'}`);return data}
+async function inputJson(){const file=flag('file');if(file)return JSON.parse(await readFile(file,'utf8'));return JSON.parse(await stdin())}
+async function login(){let c;if(action==='--stdin'||process.argv.includes('--stdin'))c=JSON.parse(await stdin());else{if(!process.stdin.isTTY)throw Error('管道登录请用 canvas login --stdin，并通过标准输入提供 {"url":...,"token":...}。');const rl=readline.createInterface({input:process.stdin,output:process.stderr});const url=await rl.question('网站地址: ');rl.close();process.stderr.write('访问令牌（隐藏输入）: ');const token=await new Promise(resolve=>{let value='';process.stdin.setRawMode(true);process.stdin.resume();const listener=chunk=>{for(const ch of chunk.toString()){if(ch==='\u0003'){process.exit(130)}if(ch==='\r'||ch==='\n'){process.stdin.off('data',listener);process.stdin.setRawMode(false);process.stdin.pause();process.stderr.write('\n');resolve(value);return}if(ch==='\u007f'||ch==='\b')value=value.slice(0,-1);else if(ch>=' ')value+=ch}};process.stdin.on('data',listener)});c={url,token}}c.url=siteUrl(c.url);if(typeof c.token!=='string'||!c.token.startsWith('ohc_'))throw Error('请输入网站设置中生成的访问令牌。');await request('/projects',{auth:c});await mkdir(dirname(configPath),{recursive:true,mode:0o700});await writeFile(configPath,JSON.stringify(c),{mode:0o600});await chmod(configPath,0o600);return {ok:true,url:c.url,credentialsFile:configPath}}
+async function main(){
+ if(!command||['help','--help','-h'].includes(command))return {usage:['canvas develop create --id PROJECT_ID --file requirements.json (title/task; save only)','canvas engine types','canvas engine connections list|get|put|delete|test --id ID [--file connection.json --revision N]','canvas engine invoke --connection ID --operation OP [--id REQUEST_ID --file input.json] (or JSON stdin)','canvas engine jobs list|get|wait --id ID [--cursor CURSOR]','canvas engine pipelines list|get|put|run --id ID [--file pipeline.json --revision N --run-id REQUEST_ID]','canvas engine export','canvas profiles list','canvas models list|preview|set --project ID [--mode auto|fast|balanced|deep|manual --effort auto|low|medium|high|xhigh|max --complexity auto|simple|standard|complex]','canvas login [--stdin]','canvas projects list|get|put|delete --id ID [--file workflow.json --revision N]','canvas runs list [--project ID]','canvas runs start --project ID [--profile PROFILE_ID --id IDEMPOTENCY_ID --task-file task.txt]','canvas runs get|events|stop|resume|wait --id ID [--after CURSOR --timeout SECONDS]','canvas runs artifacts --id ID --output result.tar.gz','canvas storage status','canvas storage list [--limit 100 --prefix PATH --cursor TOKEN]','canvas logout'],environment:['OPENHANDS_CANVAS_URL','OPENHANDS_CANVAS_TOKEN'],note:'All results are JSON. Credentials are read from the environment or a private config file; tokens are never command arguments.'};
+ if(command==='login')return login();if(command==='logout'){await unlink(configPath).catch(()=>{});return {ok:true}}
+ const id=flag('id');if(id&&!/^[a-zA-Z0-9_-]{1,100}$/.test(id))throw Error('无效 ID。');
+ if(command==='engine'){
+  const sub=args[0],connection=flag('connection');
+  if(action==='types')return request('/engine/types');
+  if(action==='export')return request('/engine/export');
+  if(action==='connections'){
+   if(sub==='list')return request('/engine/connections');if(!id)throw Error('请提供 --id。');const path='/engine/connections/'+id;
+   if(sub==='get')return request(path);if(sub==='put')return request(path,{method:'PUT',body:{...await inputJson(),expectedRevision:Number(flag('revision',0))}});if(sub==='delete')return request(path+'?revision='+Number(flag('revision')),{method:'DELETE'});if(sub==='test')return request(path+'/test',{method:'POST',body:{}});
+  }
+  if(action==='invoke'){if(!connection||!flag('operation'))throw Error('请提供 --connection 和 --operation。');return request('/engine/invocations',{method:'POST',body:{id:id||randomUUID(),connectionId:connection,operation:flag('operation'),input:await inputJson()}})}
+  if(action==='jobs'){
+   if(sub==='list')return request('/engine/invocations?'+new URLSearchParams({cursor:flag('cursor','')}));if(!id)throw Error('请提供 --id。');
+   if(sub==='get')return request('/engine/invocations/'+id);
+   if(sub==='wait'){const deadline=Date.now()+Number(flag('timeout',1800))*1000;for(;;){const r=await request('/engine/invocations/'+id);if(r.status!=='running'){if(r.status!=='succeeded')process.exitCode=2;return r}if(Date.now()>deadline)throw Error('等待超时，调用仍在后台执行。请查询同一个 ID，避免重复提交。');await new Promise(r=>setTimeout(r,1500))}}
+  }
+  if(action==='pipelines'){
+   if(sub==='list')return request('/engine/pipelines');if(!id)throw Error('请提供 --id。');const path='/engine/pipelines/'+id;
+   if(sub==='get')return request(path);if(sub==='put')return request(path,{method:'PUT',body:{...await inputJson(),expectedRevision:Number(flag('revision',0))}});if(sub==='run')return request(path+'/run',{method:'POST',body:{id:flag('run-id',randomUUID()),input:await inputJson()}});
+  }
+ }
+ if(command==='develop'&&action==='create'){if(!id)throw Error('请提供唯一的 --id。');return request('/development/projects',{method:'POST',body:{...await inputJson(),id}})}
+ if(command==='profiles'&&action==='list')return request('/profiles');
+ if(command==='projects'){if(action==='list')return request('/projects');if(!id)throw Error('请提供 --id。');if(action==='get')return request('/projects/'+id);if(action==='delete')return request('/projects/'+id,{method:'DELETE'});if(action==='put')return request('/projects/'+id,{method:'PUT',body:{state:await inputJson(),expectedRevision:Number(flag('revision',0))}})}
+ if(command==='runs'){const project=flag('project');if(project&&!/^[a-zA-Z0-9_-]{1,100}$/.test(project))throw Error('无效项目 ID。');if(action==='list')return request('/runs'+(project?'?projectId='+project:''));if(action==='start'){if(!project)throw Error('请提供 --project。');const p=await request('/projects/'+project),workflow={...p.state};if(flag('profile'))workflow.executionProfile=flag('profile');if(flag('mode'))workflow.modelMode=flag('mode');if(flag('effort'))workflow.reasoningEffort=flag('effort');if(flag('task-file'))workflow.task=await readFile(flag('task-file'),'utf8');return request('/runs',{method:'POST',body:{id:id||randomUUID(),projectId:project,workflow}})}if(!id)throw Error('请提供 --id。');if(action==='get')return request('/runs/'+id);if(action==='files')return request('/runs/'+id+'/files');if(action==='file'){if(!flag('path'))throw Error('请提供 --path。');return request('/runs/'+id+'/file?'+new URLSearchParams({path:flag('path')}))}if(action==='events')return request('/runs/'+id+'/events?after='+Math.max(0,Number(flag('after',0))||0));if(['stop','resume'].includes(action))return request('/runs/'+id+'/'+action,{method:'POST',body:{}});if(action==='wait'){const deadline=Date.now()+Math.max(1,Number(flag('timeout',1800)))*1000;for(;;){const r=await request('/runs/'+id);if(!['queued','running','reconnecting','stopping'].includes(r.status)){if(r.status!=='succeeded')process.exitCode=2;return r}if(Date.now()>deadline)throw Error('等待超时，任务仍在服务器继续执行。');await new Promise(r=>setTimeout(r,2500))}}if(action==='artifacts'){const out=flag('output');if(!out)throw Error('请提供 --output。');const path=resolve(out),r=await request('/runs/'+id+'/artifacts',{raw:true});await pipeline(Readable.fromWeb(r.body),createWriteStream(path,{mode:0o600,flags:'wx'}));return {ok:true,file:path}}}
+ if(command==='models'){if(action==='list')return request('/profiles');const project=flag('project');if(!project)throw Error('请提供 --project。');const p=await request('/projects/'+project),workflow={...p.state};if(flag('mode'))workflow.modelMode=flag('mode');if(flag('effort'))workflow.reasoningEffort=flag('effort');if(flag('complexity'))workflow.taskComplexity=flag('complexity');if(action==='preview')return request('/model-policy/preview',{method:'POST',body:{workflow}});if(action==='set'){if(!flag('mode'))throw Error('请提供 --mode。');await request('/model-policy/preview',{method:'POST',body:{workflow}});return request('/projects/'+project,{method:'PUT',body:{state:workflow,expectedRevision:p.revision}})}}
+ if(command==='storage'&&action==='list')return request('/storage/list?'+new URLSearchParams({limit:flag('limit',100),prefix:flag('prefix',''),cursor:flag('cursor','')}));
+ if(command==='storage'&&action==='status'){const s=await request('/storage');return {...s,objects:s.objects?.length}}
+ throw Error('未知命令，请运行 canvas help。');
+}
+main().then(output).catch(e=>{output({error:e.message});process.exitCode=1});

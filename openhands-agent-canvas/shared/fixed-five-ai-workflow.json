@@ -1,0 +1,179 @@
+{
+  "title": "五 AI 并行协作项目",
+  "task": "在这里填入用户实际要求，再保存项目并按用户指令执行。",
+  "executionProfile": "codex-silicon",
+  "executionMode": "parallel",
+  "maxParallelNodes": 5,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "任务起点",
+      "x": 0,
+      "y": 290
+    },
+    {
+      "id": "plan",
+      "type": "planner",
+      "name": "规划与接口契约",
+      "executionProfile": "deepseek-shanghai",
+      "prompt": "分析用户任务，将目标、约束、验收标准写入 PLAN.md，接口、数据结构、测试入口和分工写入 CONTRACT.md。后续四路将同时执行，必须定义稳定接口和明确文件所有权：上海 Codex 负责 web/，硅谷 Codex 负责 server/，首尔 Codex 负责 tests/，Claude 负责 docs/acceptance.md。目录可按任务调整，但必须互不覆盖；根目录配置、依赖和运行入口由整合阶段统一创建。保留已有产物，不自行替代各分支完成全部实现。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 230,
+      "y": 290
+    },
+    {
+      "id": "frontend",
+      "type": "code",
+      "name": "界面并行开发",
+      "executionProfile": "codex-shanghai",
+      "prompt": "读取 PLAN.md、CONTRACT.md，实现用户界面或客户端职责，在 web/ 内提交可用代码及接口调用。与服务端、测试、审查同时工作，只修改自己负责的目录，不修改 PLAN.md、CONTRACT.md、根目录配置或其他分支文件。没有界面需求时在本目录记录可交付的客户端/调用示例。结束明确列出交接接口和待联调项。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 540,
+      "y": 0
+    },
+    {
+      "id": "backend",
+      "type": "code",
+      "name": "核心逻辑并行开发",
+      "executionProfile": "codex-silicon",
+      "prompt": "读取 PLAN.md、CONTRACT.md，实现服务端或核心业务逻辑，在 server/ 内写代码和说明。与界面、测试、审查同时工作，只修改自己负责的目录，不修改公共契约、根目录配置或其他分支文件。遵守接口契约，不等待尚未汇合的分支；偏差写在本目录供整合处理。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 540,
+      "y": 200
+    },
+    {
+      "id": "test-plan",
+      "type": "code",
+      "name": "并行编写测试",
+      "executionProfile": "codex-seoul",
+      "prompt": "读取 PLAN.md、CONTRACT.md，在 tests/ 中编写基于契约的可执行测试、测试数据和运行说明。与实现分支同时工作，此阶段只提交测试，不声称已验证尚未汇合的代码。只修改 tests/，不修改实现、公共文档和根目录配置。测试必须验证实际行为，整合后由联调阶段真实执行。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 540,
+      "y": 400
+    },
+    {
+      "id": "audit",
+      "type": "review",
+      "name": "并行验收与风险审查",
+      "executionProfile": "claude-silicon",
+      "prompt": "读取 PLAN.md、CONTRACT.md，从需求、接口、边界情况和交付使用方式审查，将验收清单、风险和建议写入 docs/acceptance.md。与开发和测试同时工作，只修改这一文档，不替其他分支写实现，不声称已看过尚未汇合的代码。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 540,
+      "y": 600
+    },
+    {
+      "id": "integrate",
+      "type": "code",
+      "name": "汇合与集成",
+      "executionProfile": "codex-silicon",
+      "prompt": "四路结果已经由引擎按共同基线合并到工作目录。读取所有分支说明、实际文件及 .canvas-collaboration/handoff.json，解决文件冲突和接口偏差，集成 web/、server/、tests/ 及验收清单，补齐根目录配置、依赖、运行入口和 README.md。实际运行基本启动检查；存在冲突时按引擎要求生成 resolutions.json 及真实 SHA-256。将整合说明写入 INTEGRATION.md，保留全部需要的分支成果。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 890,
+      "y": 290
+    },
+    {
+      "id": "verify",
+      "type": "review",
+      "name": "联调测试与修复",
+      "executionProfile": "codex-seoul",
+      "prompt": "读取整合后的全部代码、PLAN.md、CONTRACT.md、INTEGRATION.md 和 docs/acceptance.md，真实执行 tests/ 中测试及适合项目的启动/集成检查，修复发现的问题。此阶段可以修改实现和测试，但保留已正确的分支成果。将实际测试命令、结果、修复和未验证项写入 TEST.md；不得将只编写测试说成已通过。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 1170,
+      "y": 290
+    },
+    {
+      "id": "release",
+      "type": "review",
+      "name": "最终验收与交付",
+      "executionProfile": "claude-silicon",
+      "prompt": "审查整合后的实际代码、PLAN.md、CONTRACT.md、验收清单和 TEST.md，核对用户目标、入口和运行说明，做可执行的验收检查。将交付结论、实际验证及限制写入 REVIEW.md。保留完整项目，不夸大未验证的内容。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 1450,
+      "y": 290
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "name": "交付结果",
+      "x": 1730,
+      "y": 290
+    }
+  ],
+  "edges": [
+    [
+      "start",
+      "plan"
+    ],
+    [
+      "plan",
+      "frontend"
+    ],
+    [
+      "plan",
+      "backend"
+    ],
+    [
+      "plan",
+      "test-plan"
+    ],
+    [
+      "plan",
+      "audit"
+    ],
+    [
+      "frontend",
+      "integrate"
+    ],
+    [
+      "backend",
+      "integrate"
+    ],
+    [
+      "test-plan",
+      "integrate"
+    ],
+    [
+      "audit",
+      "integrate"
+    ],
+    [
+      "integrate",
+      "verify"
+    ],
+    [
+      "verify",
+      "release"
+    ],
+    [
+      "release",
+      "end"
+    ]
+  ],
+  "modelMode": "auto",
+  "reasoningEffort": "auto"
+}

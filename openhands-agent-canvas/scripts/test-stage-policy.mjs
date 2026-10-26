@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {chooseModel,DEEPSEEK_LOCK} from '../shared/model-policy.mjs';
+import {compileAdaptivePlan,validateDirectDelivery} from '../server/adaptive.mjs';
+const models=[{id:'gpt-6-astra',efforts:['low','medium','high','xhigh'],verified:true},{id:'gpt-6-luna',efforts:['low','medium','high'],verified:true},{id:'unverified',efforts:['low'],verified:false}],config={mode:'remote',model:'acp:codex',profileId:'codex',policyModels:models},flow={modelMode:'auto',taskComplexity:'auto',task:'复杂的权限与并发项目'},node={id:'css',name:'外观样式',type:'code',modelPolicy:{model:'gpt-6-luna',effort:'low',complexity:'simple'}};
+const chosen=chooseModel(config,node,flow,models);assert.equal(chosen.model,'gpt-6-luna');assert.equal(chosen.effort,'low');assert.equal(chosen.complexity,'simple');assert.equal(chosen.source,'planner');
+assert.equal(chooseModel(config,node,{...flow,reasoningEffort:'high'},models).effort,'high');assert.equal(chooseModel(config,node,{...flow,modelMode:'deep'},models).model,'gpt-6-astra');
+for(const policy of [{model:'unverified'},{model:'missing'},{model:'gpt-6-luna',effort:'max'},{model:'gpt-6-luna',config:{apiKey:'bad'}},false,[],{complexity:'invalid'}])assert.throws(()=>chooseModel(config,{...node,modelPolicy:policy},flow,models));
+const pinned=chooseModel({...config,model:'acp:deepseek'},node,flow,[{id:DEEPSEEK_LOCK.nativeModel,efforts:['max'],verified:true}]);assert.equal(pinned.model,DEEPSEEK_LOCK.nativeModel);assert.equal(pinned.effort,'max');
+const seed=JSON.parse(await readFile('shared/five-ai-workflow.json')),bundle={nodeConfigs:{plan:config},teamProfiles:{codex:config}},direct={schemaVersion:1,goal:'实现用户要求',decisions:'负责人直接完成简单功能',acceptanceCriteria:['功能与实际文件一致'],maxParallelNodes:1,deliveryMode:'direct',deliverables:['src/app.js'],stages:[]};
+const compiled=compileAdaptivePlan(direct,{workflow:seed},bundle);assert.deepEqual(compiled.workflow.edges,[['start','plan'],['plan','end']]);assert.equal(compiled.stages.length,0);assert.equal(compiled.summary.directDelivery,true);validateDirectDelivery(direct,{items:[{path:'src/app.js',size:10}]});
+assert.throws(()=>validateDirectDelivery(direct,{items:[]}));assert.throws(()=>validateDirectDelivery(direct,{items:[{path:'src/app.js',size:0}]}));
+for(const files of [[],['../escape'],['/absolute'],['.canvas-collaboration/plan.json'],['dir\\bad'],['a\u0000b']])assert.throws(()=>compileAdaptivePlan({...direct,deliverables:files},{workflow:seed},bundle));
+assert.throws(()=>compileAdaptivePlan({...direct,deliveryMode:'delegated'},{workflow:seed},bundle));
+const delegated={...direct,deliveryMode:'delegated',stages:[{id:'css',name:'样式',phase:'build',executionProfile:'codex',prompt:'完成样式文件',dependsOn:[],modelPolicy:node.modelPolicy}]};assert.equal(compileAdaptivePlan(delegated,{workflow:seed},bundle).nodeConfigs.css.selection.model,'gpt-6-luna');
+console.log('Passed per-stage model/depth decisions, verified-only choices, manual precedence, DeepSeek pin, direct delivery artifact checks and delegated compatibility.');

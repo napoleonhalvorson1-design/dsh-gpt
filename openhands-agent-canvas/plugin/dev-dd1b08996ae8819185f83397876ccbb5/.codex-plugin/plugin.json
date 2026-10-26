@@ -1,0 +1,20 @@
+{
+  "apps": "./.app.json",
+  "author": {
+    "name": "App developer"
+  },
+  "description": "A visual workspace to design, configure, and simulate multi-agent workflows.",
+  "interface": {
+    "capabilities": [],
+    "category": "Other",
+    "defaultPrompt": null,
+    "developerName": "App developer",
+    "displayName": "OpenHands · Agent Canvas",
+    "longDescription": "A visual workspace to design, configure, and simulate multi-agent workflows.",
+    "shortDescription": "A visual workspace to design, configure, and simulate multi-agent workflows.",
+    "websiteURL": "https://openhands-agent-canvas-q7m2.awakesugar5.chatgpt.site"
+  },
+  "name": "dev-dd1b08996ae8819185f83397876ccbb5",
+  "version": "2.9.0",
+  "skills": "./skills"
+}

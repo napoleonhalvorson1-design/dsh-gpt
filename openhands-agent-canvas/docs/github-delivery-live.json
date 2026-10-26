@@ -1,0 +1,23 @@
+{
+  "repository": "napoleonhalvorson1-design/dsh-gpt",
+  "branch": "codex/github-delivery-loop",
+  "headSha": "8c0d5c3154a0d90abc2c22dbe543ddb5c2c8a3cf",
+  "pullRequest": 1,
+  "url": "https://github.com/napoleonhalvorson1-design/dsh-gpt/pull/1",
+  "workflowRuns": [
+    {
+      "id": 40366333287,
+      "event": "push",
+      "conclusion": "success"
+    },
+    {
+      "id": 40366366788,
+      "event": "pull_request",
+      "conclusion": "success"
+    }
+  ],
+  "codexApprovedHeadSha": "8c0d5c3154a0d90abc2c22dbe543ddb5c2c8a3cf",
+  "merged": true,
+  "mergeSha": "22d6253dde9befeb2972d6569cf5f55ce8f289ee",
+  "scope": "Real Codex-connected GitHub branch/commit/CI/PR/approval/merge for merge-gate implementation and project configuration. Website backend still needs independent credentials for external writes; no credential transfer claimed."
+}

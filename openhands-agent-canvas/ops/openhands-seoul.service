@@ -1,0 +1,33 @@
+[Unit]
+Description=OpenHands Agent Server for Seoul Codex
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/srv/openhands-seoul/state
+EnvironmentFile=/etc/openhands-seoul/runtime.env
+Environment=HOME=/home/ubuntu
+Environment=PATH=/opt/openhands-seoul/acp/node_modules/.bin:/usr/local/bin:/usr/bin:/bin:/home/ubuntu/.local/bin
+Environment=XDG_CONFIG_HOME=/srv/openhands-seoul/state/config
+Environment=XDG_CACHE_HOME=/srv/openhands-seoul/state/cache
+Environment=OPENHANDS_SUPPRESS_BANNER=1
+Environment=DISABLE_TELEMETRY=true
+Environment=OH_CONVERSATION_IDLE_TTL_SECONDS=45
+ExecStart=/opt/openhands-seoul/.venv/bin/python -m openhands.agent_server --host 127.0.0.1 --port 18181
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/openhands-seoul /home/ubuntu/.codex /home/ubuntu/.openhands
+InaccessiblePaths=-/home/ubuntu/Documents -/home/ubuntu/.ssh -/root -/etc/openhands-seoul
+MemoryMax=1200M
+CPUQuota=150%
+TasksMax=256
+CapabilityBoundingSet=
+[Install]
+WantedBy=multi-user.target

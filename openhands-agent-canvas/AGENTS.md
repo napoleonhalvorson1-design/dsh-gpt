@@ -1,0 +1,90 @@
+# OpenHands Canvas · Codex 操作指南
+
+这是可真实执行任务的工作台。通过 `canvas` 命令行或此网站的 MCP 插件操作，网页、CLI 和 MCP 共享项目和后台任务。
+
+## 连接
+
+- 上海、首尔、硅谷均已安装 `canvas`，主要入口为 `https://canvas.43-173-109-57.sslip.io`。先用 `canvas projects list` 检查连接。
+- 其他机器运行 `node bin/canvas.mjs login`，在交互提示中填写网站地址和网站设置生成的令牌。
+- 密钥只读环境变量或 `~/.config/openhands-canvas/credentials.json`，权限必须为 600。不要将令牌放在命令参数、仓库或对话中。
+- MCP 通过 Sites 为此网站创建的同名插件连接。在网站设置生成连接码，再调用 `canvas_connect`。不要另建重复插件。
+
+## 操作顺序
+
+1. `canvas projects list`，再 `canvas projects get --id ID` 读取工作流和 revision。
+2. 修改节点、提示词、任务、连线后，使用 `canvas projects put --id ID --file workflow.json --revision N` 保存。新项目 revision 为 0；409 时重读并合并，不能盲目覆盖。
+3. 用户要求执行时，使用 `canvas runs start --project ID --id UNIQUE_REQUEST_ID`。这是实际模型调用；同一个提交重试要保留 ID。
+4. 使用 `canvas runs get --id ID` 或 `canvas runs wait --id ID` 跟踪。关闭终端不会停止任务。
+5. `canvas runs events --id ID --after CURSOR` 读取日志，`canvas runs files --id ID` 列出产物，`canvas runs file --id ID --path index.html` 读取文本文件；有 hasMore 时继续分页。
+6. 完成后使用 `canvas runs artifacts --id ID --output result.tar.gz` 下载产物，验证实际文件。仅凭 OpenHands 的 finished 字段不能判断模型成功，工作台会检查 provider 错误和节点输出。
+7. 停止使用 `canvas runs stop --id ID`，等待状态 cancelled；不要将 stopping 当作已停止。重试使用 `canvas runs resume --id ID`，已完成节点不会重复调用。
+
+节点类型 start/end/planner/research/code/review/custom。节点必填 id/type/name/x/y，智能体可以设置 prompt/tools/liveModel。edges 为 `[sourceId,targetId]`，不能有环，智能体必须能从 start 到达。任务写在 state.task 中，输出文件写入服务器分配的本次工作目录。
+
+默认硅谷 Codex ACP 使用已验证的 gpt-6.1-sol，上海 Codex / DeepSeek、硅谷 Codex / Claude、首尔 Codex 共五个入口已接入。使用 `canvas profiles list` 查询入口。项目和节点的 `executionProfile` 分别控制默认入口和单节点入口；三 AI 模板为 deepseek-shanghai → codex-silicon → claude-silicon；五 AI 新项目由已验证的最强可用模型（优先 GPT-6 Astra / 硅谷 Codex）根据需求自主规划，启动后生成实际分工及 DAG，再执行需求实现、必要集成、最后测试与交付。历史固定工作流继续兼容。跨服务器文件会自动交接，凭据保留在服务端。更改执行模型先做小任务验证；模型列表展示不代表账户可用。不要改动服务器原有 Codex/Claude 账户配置、代理凭据或其他项目服务。
+
+## 项目开发
+
+Node.js >=22.16，先 `npm ci`。`npm run build && npm test` 检查 Worker、后台队列、加密、鉴权、恢复与 MCP。发布保留 `.openai/hosting.json` 中的 Site ID，使用 Sites 源码工作流；后台代码在 `/opt/openhands-control`，服务 `openhands-control.service`。运行中的真实任务需要先检查，服务重启只用于必要升级或明确的恢复验证。
+
+对象存储配置在网页设置完成，凭据加密保存在 SQLite。不要导出真实凭据到项目 JSON。恢复备份遵循 README，先恢复到独立目录验证；不要覆盖正在运行的数据库。
+
+七彩云对象存储使用控制器环境变量。用户已授权将五 AI 协作数据写入桶，生产环境已启用自动同步和每日备份。首次接入其他桶仍先做只读列举。`canvas storage list --limit 20` 列出桶内文件，`--cursor` 翻页。网页和 MCP 的 `canvas_list_storage_objects` 也可只读列举。密钥未配置或列举权限不足时必须如实报告，不能宣称连接成功；不要调用写入测试、同步或备份代替首次只读验收。
+
+## 本项目的使用偏好
+
+优化优先级：引擎能力优先，用户界面保持简单。用户要求减少审查、验收、风险报告和重复测试的 token 消耗，多投入实际实现。默认不另设审查员、不强制生成 PLAN/CONTRACT/TEST/REVIEW 文档；按需求只做必要检查，说明简短，已有说明确需变更时更新。主要投入五 AI 真正并行协作、按能力分工、模型与思考深度调度、上下文与文件交接、冲突合并、失败恢复、执行速度和资源利用。以实际任务成功率、耗时、重复调用和产物验证衡量效果。界面只为清楚查看状态、错误、产物和必要的轻量修改做调整，避免反复美化、增加复杂操作或要求用户手工编排。主要操作入口继续是与 Codex 聊天，手机主要用于查看。
+
+用户主要通过与 Codex 聊天操作工作台。直接使用 MCP/CLI 完成创建项目、安排五 AI 分工、启动、跟踪和查看产物，不要求用户在手机上编辑画布。手机默认是查看界面：项目、阶段进度、文件预览、下载和少量说明修改。手机端会自动发现 Codex 创建的新运行及项目版本；查看历史运行时保留所选记录。
+
+只改项目名称或任务说明时，先读当前项目及 revision，然后用 `canvas_update_project_details`，保留图、AI 入口及节点提示词；此操作不触发模型调用。修改任务并执行时，继续调用 `canvas_start_run` 并使用唯一运行 ID。完整流程修改仍用 `canvas_save_project` 或 CLI `projects put`，遵循版本冲突处理。
+
+协作数据保存在 `zzx123-u1aya4fk/openhands-canvas/`：项目版本、运行输入和状态、增量日志、阶段文件快照、完整产物和数据库备份。新运行每个节点成功后必须先保存阶段快照；跨服务器交接从桶下载并校验 SHA-256，然后交给下一个 AI。对象存储故障时，重试不得重新调用已经完成的节点。不要把服务器执行工作目录当作桶挂载，也不要在五个 Agent 中分发 S3 密钥。
+
+配套插件保持 ID `plugin_asdk_app_sites_dd1b08996ae8819185f83397876ccbb5`，源码在 `plugin/dev-dd1b08996ae8819185f83397876ccbb5/`。使用 Plugin Creator 更新现有插件，禁止新建重复插件。`npm run plugin:pack` 验证并打包；更新账户后把返回的版本、plugin_url 和 release_id 写入 `plugin/release.json`，再构建/发布现有 Site。网站自动嵌入相同源码的 ZIP 和版本信息，版本不匹配会阻止构建。App 生成的绑定与展示信息由 `plugin/preserved-app-metadata.json` 校验并保留。插件升级不改运行环境文件、数据桶或服务器登录。
+
+硅谷原生 Codex 已注册本地来源 `openhands-canvas`（界面名「OpenHands 工作台」），选择器 `dev-dd1b08996ae8819185f83397876ccbb5@openhands-canvas`。后续更新本地安装使用 `npm run plugin:install-local`；不直接修改插件缓存。不要把账户云插件已发布误报为所有服务器原生 Codex 都已安装。
+
+用户从手机 Codex 连接硅谷。插件本身显示为「OpenHands · Agent Canvas」，不要混同来源名「OpenHands 工作台」。CLI 安装检查、正在运行的远程服务目录、手机界面显示要分别验证。2026-10-26 已只读检查实际 Android 远程服务的默认/私有插件目录、技能和当前会话 App，安装与调用正常，手机列表显示尚未确认。不要仅凭另起的 app-server 进程或 CLI 检查就说手机已修好；当前执行工具依赖同一个远程服务，避免为了刷新插件强制重启它。
+
+## 通用接入引擎
+
+网站 5.0 / 插件 2.0 新增 /engine API。连接目录包含内置五 AI、七彩云桶，以及可配置的 openai、anthropic、s3、github、webdav、google-drive、onedrive、http（OpenAPI 3）。用 canvas_engine_connections 或 canvas engine connections list 发现，不能把支持类型说成已授权的账号。配置需当前 revision；新连接默认只读，写入/推理依用户授权开启。凭据使用网站密码表单或控制器环境引用，不发到聊天。
+
+跨服务编排用 engine pipelines；步骤输入引用 {{input.field}} / {{steps.id.data.field}}。所有调用后台持久化并使用唯一 ID 去重；interrupted 表示结果不确定，先核对，不自动换 ID 重放。AI 内置连接的 run 操作返回 linkedRun，可用原运行 API 跟踪文件。只读测试不产生模型调用或外部写入。协议、权限、凭据、分页、恢复和数据流验收在 scripts/test-engine.mjs；桶同步复用原有每日备份和环境文件。
+
+## 五 AI 并行开发的日常入口（5.2）
+
+用户优先要五 AI 协作开发项目。使用 canvas_save_project({id,expectedRevision:0,state:{preset:"five-ai",title,task}}) 创建默认自主协作项目，再按用户要求使用唯一 run ID 开始；CLI 对应 canvas develop create。shared/five-ai-workflow.json 为自主规划种子（collaborationMode=adaptive，start→plan→end）。plannerPolicy=strongest 选择已验证的最强可用模型先按需求决定人数、职责、入口、并行及汇合时机，输出 .canvas-collaboration/plan.json；引擎校验后扩展当前运行的 DAG。默认 coordinationPolicy=lean，以实际实现为主。1 个 build 即可完成，verify/deliver 可省略、合计最多一个；确需 verify 时等全部 build/integrate 完成。实干节点做必要的小检查即可直接交付；不固定前后端/测试/审查四路，也不为凑齐五个 AI 增加无关工作。必要的实现阻塞可做最小检查，验证只覆盖实际改动，失败后定点修复，不例行全面复核。DeepSeek 仍固定 V4.1 Flash + max。项目保存不执行；运行生成的分工保存在运行和数据桶，不盲目覆盖项目及历史。固定旧模板保存在 shared/fixed-five-ai-workflow.json。
+
+交付时给 /?project=ID&run=ID 直达链接，读取实际文件并验证主要交互。未完成运行可从最近一个成功阶段快照读取/下载代码，partial=true 必须说明尚未完成验收。预览桥支持隔离存储和静态本地依赖，不能给 iframe 增加 allow-same-origin。单文件下载为 /api/runs/ID/file-download?path=...，只以附件响应。等待输入的任务也允许请求停止，仍须后台确认取消。
+
+并行调度由 server/engine.mjs 按 DAG 依赖执行，历史串行运行由 serial-engine.mjs 兼容。每节点独立目录；outputReady 代表文件快照通过校验及配置的桶写入屏障，不能只看 succeeded 就启动下游。运行/全局节点上限五个；maxActive 是工作流上限。状态更新必须读最新运行再仅合并本节点，禁止并发分支保存过时的整轮 payload。同文件冲突保留分支副本和显式 SHA-256 解决记录；所有分支确认停止后才可 cancelled。测试 npm run test:parallel 覆盖实际 HTTP 协议并发、隔离、三方合并、重试、停止和重启。
+
+5.2.1 加速：文件交接共享四个上传槽、32 MiB 原文件缓冲与两个归档进程，只解压一次。restoreCheckpoint 默认刷新远端；执行/预览可显式 reuseVerified=true，首次桶下载和每次本地 SHA 校验不得省略。S3 client() 返回 send/destroy 借用对象，destroy 释放连接而非关闭共享池；请求结束、错误和取消都必须释放。patchNode 无变化不写库。静态资源可 private/no-cache + ETag，HTML/API 仍 no-store 且先做鉴权。性能测试 npm run test:performance；不为升级启动真实 AI。
+
+## 模型与思考模式（5.3）
+
+使用 `canvas models list` 查询实际入口能力，`canvas models preview --project ID --mode auto` 只预览，`canvas models set --project ID --mode fast` 按 revision 保存完整流程。五档 auto/fast/balanced/deep/manual；自动选择只用 verified=true 的模型，按任务难度和验收/集成阶段选择；文件冲突可升级。每节点 liveModel/reasoningEffort 可覆盖其他 AI，DeepSeek 始终固定 DeepSeek V4.1 Flash + max，不得改 Pro 或降低。modelSelection 是计划，selectionApplied 才表示会话已确认。续跑冻结原运行选择。原生会话使用 ops/acp-policy.py 设置并确认模型和深度，回执与 conversationId 绑定并进入桶快照；部署新服务器时把脚本安装到其工作根目录/.canvas-runtime/acp-policy.py，不改原有登录配置。
+
+GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写，凭据是否存在与真实仓库权限单独核实。优先使用 Codex 已连接 GitHub 操作用户自有仓库；网站后台需要独立凭据，不能把聊天授权说成后台已授权。缺凭据时写操作应 unavailable，测试公共 rate_limit 不代表登录成功。创建项目工具描述必须与自主分工和精简策略一致，不再描述固定八阶段。
+
+## 执行加速（5.7）
+
+已安装并校验的 bulkHandoff 入口通过流式上传整包和原生命令导入，固定两次请求；每次执行校验 helper SHA-256、源归档 SHA-256、目录范围和提交回执。只用于隔离的 runs 目录，禁止符号链接，原目录在导入成功前保留。入口未配置则沿用旧文件协议。服务器安装使用 `node ops/install-fast-handoff.mjs /受保护的/profiles.json`，保留原文件属主、组和权限；配置中不导出密钥。代理归档上传上限 130 MiB，单文件/工作区仍为 32/128 MiB。
+
+所有控制器归档处理共用两个进程槽；三方合并将大文件放临时磁盘，全部父分支合计最多缓存 8 MiB 内容，保持 SHA-256 冲突语义。输入快照存储与模型执行重叠，输入、输出与元数据都成功保存后才允许下游运行；存储失败只重试存储。模型完成即释放全局推理名额。已验证 eventStream 的入口使用 `/sockets/events/ID` 和首帧认证唤醒，密钥不放 URL；REST 分页和错误检查仍决定完成，断开后沿用轮询。节点 inputReadyAt / snapshotReadyAt / outputReadyAt 与既有 submittedAt / finishedAt 可区分执行和编排耗时。
+
+性能结论必须注明范围：`scripts/benchmark-native-handoff.mjs` 为三服务器真实文件传输；`scripts/benchmark-pipeline.mjs BASELINE_DIR` 为完整引擎和协议夹具、固定模型响应时间；`scripts/benchmark-merge-memory.py BASELINE_HANDOFF_PY` 为大工作区内存能力。夹具与局部加速不能证明真实 AI 项目整体快四倍。
+
+5.8 / 插件 2.7：强规划 AI 可以直接实现简单需求，plan.json 使用 deliveryMode=direct、deliverables=[实际成果文件]、stages=[]。对应文件必须在已经保存的规划快照中、路径有效且非空，不能只写计划；仍经过模型/深度回执与对象存储屏障，不新增实现或验收调用。委派模式继续支持 1 至 10 个阶段。自动模式下可为阶段填写 modelPolicy={model,effort,complexity}，目录提供各入口已验证模型和支持深度；按分工而非整个项目选择，手动模式、显式模型/深度优先，DeepSeek 始终锁定。文件冲突仍可提升自动模型，规划提示不携带凭据。读 run.adaptivePlan.directDelivery 与实际文件判断直接交付，不假设每次运行都有实现子节点。
+
+## GitHub 闭环优先（5.9 / 插件 2.8）
+
+用户已授权当前开发任务自动建开发分支、提交代码、运行 CI、生成 PR；测试通过后由 Codex 检查并批准合并，不重复询问已授权的合并。只处理当前任务的 PR，不自动合并无关 PR。当前自有仓库 napoleonhalvorson1-design/dsh-gpt 的 PR #1 已真实完成闭环，证据见 docs/github-delivery-live.json；CI 覆盖接入模块与合并门槛，不能替代未来业务功能测试。
+
+先用现成 Codex GitHub 连接；网站后台没有 PAT 时不把它当作阻塞聊天操作，也不声称后台已有 GitHub 授权。原有 github 适配器新增 repo/branch/create_branch/commit_files/pull_request/create_pull_request/workflow_runs/dispatch_workflow/ci_status/merge_pull_request；操作 schema 由 engine connection/types 返回。新提交操作禁止直接写默认主分支，基于 expectedHeadSha 原子更新文件树，保留未修改文件。合并前读取当前 head 的完整 CI 分页；空、失败、等待、缺失必要检查均不通过。Codex 单独批准 approvedHeadSha，并带 expectedHeadSha 调 GitHub，head 改变即失效；merge_pull_request 禁止保存或执行为自动 pipeline 步骤。不得使用自动 auto-merge 代替 Codex 批准。后台密钥与模型密钥不下发 AI。
+
+5.10 / 插件 2.9：新自托管项目可设置 repository、branch、githubConnectionId（默认 github-public）。快捷 preset 与 develop create 保留这些字段。仓库在任何推理前固定为 SHA，归档只下载一次并经校验入桶，所有分支共用同一基线；独立根分支汇合也使用源仓库基线，保留删除语义。run.repositorySource 为真实源记录；_canvas_repository_source 为保留的内部快照标识。私有读取需要后台 GitHub 连接 Contents 读权限，聊天凭据不转移。源代码不向 Agent 分发 GitHub 密钥，归档跳转只接受同源或 GitHub codeload，跳转不带认证 Header。存储失败重试不移动源提交，重启优先恢复桶快照。
+
+归档保留脚本执行位（规范化为 644/755，原生隔离目录写为 600/700），整包回执也检查执行位。helper 以内容哈希命名，保留旧 helper 供冻结的旧运行使用；升级通过 ops/install-fast-handoff.mjs，保持原配置权限和账户。GitHub commit_files 的 mode 可为 100644/100755；修改脚本保留原执行位。执行分支直接实现职责，新增协作由本次 plan.json 交给引擎派发，避免在导入源码的 AGENTS 指南中再次启动工作流。

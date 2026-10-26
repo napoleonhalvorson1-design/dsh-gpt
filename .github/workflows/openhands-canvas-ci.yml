@@ -23,3 +23,25 @@ jobs:
         run: node --test .openhands/github-gate.test.mjs
       - name: Check project configuration
         run: node --input-type=module -e 'import fs from "node:fs";const c=JSON.parse(fs.readFileSync(".openhands/canvas.json"));if(c.github.mergeApproval!=="codex-after-ci"||!c.github.requiredChecks.includes("canvas-ci"))process.exit(1)'
+
+  engine-ci:
+    name: engine-ci
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openhands-agent-canvas
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: openhands-agent-canvas/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - run: npm test

@@ -1,0 +1,82 @@
+{
+  "websiteVersion": "5.2.1",
+  "baselineWebsiteVersion": "5.2.0",
+  "fixture": {
+    "checks": 414,
+    "measurements": {
+      "before": {
+        "idlePollWrites": 50,
+        "handoff": {
+          "durationMs": 6329,
+          "files": 81,
+          "bytes": 9835
+        },
+        "storage": {
+          "coldReaders": 8,
+          "coldGets": 8,
+          "coldMs": 141,
+          "warmReaders": 8,
+          "warmGets": 8,
+          "warmMs": 532,
+          "freshReadConnections": 3
+        }
+      },
+      "after": {
+        "idlePollWrites": 0,
+        "handoff": {
+          "durationMs": 705,
+          "files": 81,
+          "bytes": 9835
+        },
+        "storage": {
+          "coldReaders": 8,
+          "coldGets": 1,
+          "coldMs": 65,
+          "warmReaders": 8,
+          "warmGets": 0,
+          "warmMs": 4,
+          "freshReadConnections": 1
+        }
+      },
+      "handoffReductionPercent": 89
+    }
+  },
+  "realS3ReadOnly": {
+    "at": "2026-10-26T14:47:56.934Z",
+    "runId": "parallel-engine-acceptance-20261026",
+    "stage": "plan",
+    "readOnly": true,
+    "before": {
+      "coldMs": 1148,
+      "warmReadMs": [
+        961.35,
+        959.22,
+        966.74,
+        1014.88
+      ],
+      "warmTotalMs": 3902.19,
+      "downloads": 5,
+      "sha256Verified": true
+    },
+    "after": {
+      "coldMs": 930,
+      "warmReadMs": [
+        6.57,
+        5.89,
+        5.85,
+        4.07
+      ],
+      "warmTotalMs": 22.38,
+      "downloads": 1,
+      "sha256Verified": true
+    }
+  },
+  "limits": {
+    "uploads": 4,
+    "uploadSourceBufferMiB": 32,
+    "archiveProcesses": 2,
+    "verifiedCacheEntries": 64
+  },
+  "aiWorkflowChanged": false,
+  "pluginVersion": "2.2.0"
+}
