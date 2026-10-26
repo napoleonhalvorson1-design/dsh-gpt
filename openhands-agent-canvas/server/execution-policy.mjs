@@ -28,7 +28,7 @@ export function compileExecutionPolicy(primary,node,flow,team={}){
  if(flow.runtimeContext==='focused'&&next.runtimeContext!=='focused')throw new ApiError('后备入口不支持项目指定的精简上下文。',409);
  if(!next.selection?.verified)throw new ApiError('自动后备只能使用已验证模型。',409);
  if(definition.liveModel&&next.selection.model!==definition.liveModel)throw new ApiError('后备不能改写手动指定的模型。',409);
- if(primary.selection?.planner)next.selection={...next.selection,planner:true,source:'planner',reason:'已验证的同一强规划模型在后备入口继续'};
+ if(primary.selection?.planner)next.selection={...next.selection,planner:true,source:'planner',complexity:primary.selection.complexity,...(primary.selection.planningComplexity?{planningComplexity:primary.selection.planningComplexity}:{}),reason:'已验证的同一强规划模型在后备入口继续'};
  if(next.profileId===primary.profileId&&next.selection.model===(primary.selection?.model||primary.acpModel)&&next.selection.effort===primary.selection?.effort)throw new ApiError('后备须选择不同入口、模型或思考深度。');
  next.executionPolicy={budgetSeconds:policy.budgetSeconds};delete next.fallbackConfig;
  primary.fallbackConfig=next;return primary;

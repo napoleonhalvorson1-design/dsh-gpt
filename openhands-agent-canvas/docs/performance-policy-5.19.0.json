@@ -1,0 +1,178 @@
+{
+  "completeGoal": false,
+  "goalSpeedFactor": 11,
+  "scope": "Actual CLI feature development from one SHA-pinned own GitHub repository on deployed 5.18; parent integration/CI/PR excluded",
+  "taskSha256": "106cd0da81b70aeffbee30ba0da8fccc1a43bc09478373e3ad03f2ba42d1c363",
+  "runId": "engine-run-policy-20261027-r1",
+  "status": "succeeded",
+  "createdAt": "2026-10-26T21:22:17.048Z",
+  "finishedAt": "2026-10-26T21:24:16.129Z",
+  "performance": {
+    "schemaVersion": 1,
+    "elapsedMs": 119081,
+    "nodes": [
+      {
+        "id": "plan",
+        "queueMs": 22,
+        "preparationMs": 7236,
+        "submissionWaitMs": 15,
+        "modelMs": 33157,
+        "snapshotMs": 399,
+        "barrierMs": 4614,
+        "endToEndMs": 45421,
+        "endToEndEndField": "outputReadyAt",
+        "endToEndComplete": true,
+        "timingComplete": true
+      },
+      {
+        "id": "implement",
+        "queueMs": 3202,
+        "preparationMs": 359,
+        "submissionWaitMs": 8,
+        "modelMs": 61979,
+        "snapshotMs": 430,
+        "barrierMs": 4587,
+        "endToEndMs": 67363,
+        "endToEndEndField": "outputReadyAt",
+        "endToEndComplete": true,
+        "timingComplete": true
+      }
+    ],
+    "modelWallMs": 95136,
+    "modelWorkMs": 95136,
+    "observedPeakModels": 1,
+    "modelIntervalsComplete": true,
+    "overall": {
+      "modelRatio": 0.7989183832853268,
+      "overheadRatio": 0.2010816167146732,
+      "nonModelWallMs": 23945
+    },
+    "slowestNode": {
+      "id": "implement",
+      "endToEndMs": 67363,
+      "endField": "outputReadyAt",
+      "complete": true
+    },
+    "warnings": []
+  },
+  "sourceCommit": "f34298f7ec450f98f24e6fcf37fa1b350f6e78ec",
+  "selectionInput": {
+    "modelMode": "auto",
+    "taskComplexity": "standard",
+    "initialNodeRuntimeContext": "focused",
+    "note": "This real run used the existing explicit whole-run taskComplexity input. The newly separated planningComplexity hint is verified through controller/MCP policy tests, not a new paid probe."
+  },
+  "adaptivePlan": {
+    "status": "applied",
+    "plannerId": "plan",
+    "sha256": "e39059fa7e56bce5b887573622c040a51fa632fa07a66eb5c79dffb661cd9973",
+    "appliedAt": "2026-10-26T21:23:05.686Z",
+    "directDelivery": false,
+    "goal": "为 CLI 单次运行添加 --complexity 覆盖，保留保存的项目配置，并补充协议测试和简短文档。",
+    "decisions": "由一个支持 focused 的 Codex 实现节点完成三个关联文件及一次必要测试，直接交付，不另设审查。",
+    "acceptanceCriteria": [
+      "--complexity auto|simple|standard|complex 写入本次 workflow.taskComplexity；未传继承，非法、空或缺失值在 POST /runs 前报错，help 同步更新。",
+      "保留原 CLI 功能、凭据读取及请求字段，不 PUT 项目，不新增相对模块依赖，仅修改指定三个文件。",
+      "Node.js 22 无依赖本地协议测试覆盖覆盖值、继承、模式/深度/工作流字段保留及非法值不提交；运行一次，失败定点修复，文档说明明确用户设置优先。"
+    ],
+    "coordinationPolicy": "lean",
+    "reviewStages": 0,
+    "maxParallelNodes": 1
+  },
+  "nodes": [
+    {
+      "id": "plan",
+      "profileId": "codex-silicon",
+      "modelUsed": "gpt-6-astra",
+      "reasoningEffort": "medium",
+      "selectionApplied": true,
+      "runtimeContextRequested": "focused",
+      "modelUsage": {
+        "schemaVersion": 1,
+        "requestId": "dce21ce4-2858-4af7-9d1a-daff3d51f34a",
+        "model": "gpt-6-astra",
+        "effort": "medium",
+        "scope": "acp-prompts-including-tools",
+        "elapsedMs": 31442,
+        "completedPrompts": 1,
+        "stopReason": "end_turn",
+        "tokens": {
+          "totalTokens": 93766,
+          "inputTokens": 18571,
+          "cachedReadTokens": 74368,
+          "cachedWriteTokens": 0,
+          "outputTokens": 827,
+          "thoughtTokens": 27
+        }
+      },
+      "checkpoint": {
+        "key": "openhands-canvas/runs/engine-run-policy-20261027-r1/stages/plan/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "engine-run-policy-20261027-r1",
+        "nodeId": "plan",
+        "conversationId": "dce21ce4-2858-4af7-9d1a-daff3d51f34a",
+        "sha256": "f37e7e5c54e27428365a4e7b44f57adbe9610be69dbd814d7f13422b7435fb96",
+        "size": 501165,
+        "capturedAt": "2026-10-26T21:22:57.882Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "implement",
+      "profileId": "codex-silicon",
+      "modelUsed": "gpt-6.1-sol",
+      "reasoningEffort": "medium",
+      "selectionApplied": true,
+      "runtimeContextRequested": "focused",
+      "modelUsage": {
+        "schemaVersion": 1,
+        "requestId": "67383db7-d3c9-4324-8bd8-8f7a730de80f",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "scope": "acp-prompts-including-tools",
+        "elapsedMs": 60413,
+        "completedPrompts": 1,
+        "stopReason": "end_turn",
+        "tokens": {
+          "totalTokens": 130338,
+          "inputTokens": 29664,
+          "cachedReadTokens": 97536,
+          "cachedWriteTokens": 0,
+          "outputTokens": 3138,
+          "thoughtTokens": 293
+        }
+      },
+      "checkpoint": {
+        "key": "openhands-canvas/runs/engine-run-policy-20261027-r1/stages/implement/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "engine-run-policy-20261027-r1",
+        "nodeId": "implement",
+        "conversationId": "67383db7-d3c9-4324-8bd8-8f7a730de80f",
+        "sha256": "c182f45554616c9f17187ae200d78d3724815c8ebab37846309e03ac22327492",
+        "size": 502692,
+        "capturedAt": "2026-10-26T21:24:08.477Z",
+        "historical": false
+      }
+    }
+  ],
+  "artifactVerification": {
+    "sha256": "c182f45554616c9f17187ae200d78d3724815c8ebab37846309e03ac22327492",
+    "changedFiles": [
+      "openhands-agent-canvas/bin/canvas.mjs",
+      "openhands-agent-canvas/scripts/test-cli-run-policy.mjs",
+      "openhands-agent-canvas/docs/run-policy.md"
+    ],
+    "unchangedSourceFiles": 179,
+    "checks": "Archive SHA matched completed checkpoint; exact three source changes verified; actual CLI protocol tests passed."
+  },
+  "limitations": [
+    "This task differs from earlier real tasks; no elapsed-time ratio across them is a valid speedup claim.",
+    "Native model/effort confirmation is based on stage receipts, not catalogue labels alone.",
+    "The initial hint does not globally lower downstream difficulty; the strongest coordinator can still choose complex/high-depth stages.",
+    "Default automatic rules and explicit user overrides remain; DeepSeek stays Flash/max.",
+    "The previous cancelled DeepSeek run has no completed usage receipt; its long wait is not attributed to a definite cause.",
+    "No result proves 11x whole-development speed."
+  ]
+}

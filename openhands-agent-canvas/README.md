@@ -313,3 +313,5 @@ ACP 策略会将标准 prompt-result usage 的数字字段写入 runtime-usage.j
 5.17 / 插件 2.16：新运行可指定 baseRunId（CLI --base-run）在同项目已成功且入桶的成果上继续开发，保留代码、测试、二进制、执行位及删除语义，不重跑原 AI。来源固定为校验快照，新基线也须入桶后才启动新推理；存储失败/重启只补存储。baseRunId 优先于仓库导入，repository 仍用于 GitHub 交付。未完成任务使用 resume。说明见 docs/incremental-development.md；协议测试不代表整体已达 11 倍。
 
 5.18 / 插件 2.17：Storage.sync 的独立项目/运行/配置/到期备份共享一个有界队列，活动运行先拿槽，不再有整类等待。lastSyncBatch 实时提供 total/active/pending/completed 与逐项完成结果；版本/latest、日志块/index 等根内顺序及关闭排空保留。settledPool 新增可等待 onSettled，通知失败停止新派发并排空后以原错误拒绝，不重试 worker。实测证据见 docs/performance-sync-5.18.0.json，未证明整体 11 倍。
+
+5.19 / 插件 2.18：单次 start 可覆盖模式、深度和 taskComplexity（CLI --complexity）；快捷创建保留难度。planningComplexity/--planning-complexity 是 auto+strongest 负责人的初始难度提示，仅在用户未固定全程难度时生效，不限制负责人后续阶段升级；评估实际语义而非说明长度，不确定用 auto。单次参数不保存项目，续跑保持冻结设置，DeepSeek Flash/max 不变。见 docs/run-policy.md；真实任务证据在 docs/performance-policy-5.19.0.json，未证明整体 11 倍。
