@@ -1,3 +1,4 @@
+import {nativeTrace} from './native-trace.mjs';
 import http from 'node:http';
 import {Readable} from 'node:stream';
 import {createReadStream} from 'node:fs';
@@ -88,9 +89,10 @@ export function createControl({database,apiKey,encryptionKey,pollMs=3000,default
         if(method==='DELETE'){if(store.listRuns(id).some(r=>ACTIVE.has(r.status)))throw new ApiError('项目仍有运行中的任务，请先停止运行。',409);store.deleteProject(id);return json(res,{ok:true})}}
       if(path==='/runs'&&method==='GET')return json(res,{items:store.listRuns(url.searchParams.get('projectId')||undefined).map(runSummary)});
       if(path==='/runs'&&method==='POST'){const data=await body(req),run=engine.enqueue(data,profiles.compile(config(data.backend),data.workflow));return json(res,safeRun(run),202)}
-      const match=path.match(/^\/runs\/([a-zA-Z0-9_-]{1,100})(?:\/(events|stop|resume|artifacts|files|file|file-download|performance))?$/);
+      const match=path.match(/^\/runs\/([a-zA-Z0-9_-]{1,100})(?:\/(events|stop|resume|artifacts|files|file|file-download|performance|trace))?$/);
       if(match){const [,id,action]=match,run=store.run(id);if(!run)throw new ApiError('运行记录不存在。',404);
         if(!action&&method==='GET')return json(res,url.searchParams.get('version')===String(run.revision)?{unchanged:true,revision:run.revision}:safeRun(run));
+        if(action==='trace'&&method==='GET')return json(res,await nativeTrace(run,url.searchParams.get('nodeId')||undefined,store.config(id),profiles));
         if(action==='performance'&&method==='GET')return json(res,{id:run.id,status:run.status,performance:analyzeRun(run,{now:Date.now()})});
         if(action==='events'&&method==='GET'){const after=Math.max(0,Number(url.searchParams.get('after'))||0),items=store.events(id,after);return json(res,{items,nextCursor:items.at(-1)?.seq||after,hasMore:items.length===200})}
         if(action==='stop'&&method==='POST'){const data=await body(req);const saved=store.config(id);if(data.backend&&!saved.nodeConfigs){const next=config(data.backend);if(next.baseUrl===saved.baseUrl)store.setConfig(id,next)}return json(res,safeRun(engine.stop(id)))}

@@ -133,3 +133,7 @@ strongest 新运行按工作台保留量选择同模型、同深度的已验证�
 未固定模式/深度/难度的新自主任务，由 Codex 按实际改动语义评估 planningComplexity（auto/simple/standard/complex），通过 canvas_start_run 或 CLI --planning-complexity 只提示最强负责人的初始设置。后续阶段仍由负责人独立选择模型、复杂度和深度；不要把初始评估填成全程 taskComplexity，不能仅凭说明字数或为提速把复杂工作降级，不确定用 auto。用户明确固定的设置优先，DeepSeek Flash/max 锁保持。
 
 用户要求单次覆盖时，MCP start 支持 modelMode/reasoningEffort/taskComplexity；CLI start 用 --mode/--effort/--complexity。快捷创建保留两类难度。均不自动修改保存项目或已开始的原生设置；续跑冻结原策略。详细边界和使用见 [运行策略](references/run-policy.md)。新 schema 尚未刷新时用配套 CLI，不重建插件。
+
+## 原生等待诊断（5.20 / 插件 2.19）
+
+DeepSeek 阶段等待较长时，用 canvas_run_status 的 view=trace、nodeId，或 CLI runs trace --id RUN --node NODE 读取已有数字记录，再决定等待、停止或调整下次分工。先读 [原生诊断](references/native-trace.md)。不读取或转述思考内容，不把已知下限当完整账单，不把原生 turnEnded 当交付。最近数字可供最强负责人参考，但失败/取消不算成功样本，不因 token 大就自动停止。Flash/max 锁保持；不为诊断调用模型。

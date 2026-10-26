@@ -1,0 +1,25 @@
+{
+  "completeGoal": false,
+  "goalSpeedFactor": 11,
+  "scope": "Read-only numeric analysis of an existing cancelled real DeepSeek run; no new inference",
+  "runId": "engine-performance-fastplan-20261027-r1",
+  "nodeId": "implement",
+  "runStatus": "cancelled",
+  "source": "dsh-v4-session",
+  "binding": "unique-workspace-and-request-receipt",
+  "stepCount": 13,
+  "meteredMessages": 12,
+  "unmeteredMessages": 1,
+  "knownOutputTokensLowerBound": 116801,
+  "maxStepOutputTokens": 72000,
+  "maxBeforeToolMs": 448431,
+  "knownMatchedToolMs": 557,
+  "providerThinkingPolicy": "DeepSeek Flash/max preserved",
+  "limitations": [
+    "Output tokens may include reasoning; no private text is exported.",
+    "Unmetered interrupted content is excluded, so counts are lower bounds.",
+    "Before-tool time includes model request waiting and generation, not exclusively reasoning or network.",
+    "This cancelled run is not a successful speed benchmark; no whole-development 11x claim.",
+    "Vendor ACP profile already disables model-generated session titles; no redundant title optimization was applied."
+  ]
+}

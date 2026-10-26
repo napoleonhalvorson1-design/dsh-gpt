@@ -315,3 +315,5 @@ ACP 策略会将标准 prompt-result usage 的数字字段写入 runtime-usage.j
 5.18 / 插件 2.17：Storage.sync 的独立项目/运行/配置/到期备份共享一个有界队列，活动运行先拿槽，不再有整类等待。lastSyncBatch 实时提供 total/active/pending/completed 与逐项完成结果；版本/latest、日志块/index 等根内顺序及关闭排空保留。settledPool 新增可等待 onSettled，通知失败停止新派发并排空后以原错误拒绝，不重试 worker。实测证据见 docs/performance-sync-5.18.0.json，未证明整体 11 倍。
 
 5.19 / 插件 2.18：单次 start 可覆盖模式、深度和 taskComplexity（CLI --complexity）；快捷创建保留难度。planningComplexity/--planning-complexity 是 auto+strongest 负责人的初始难度提示，仅在用户未固定全程难度时生效，不限制负责人后续阶段升级；评估实际语义而非说明长度，不确定用 auto。单次参数不保存项目，续跑保持冻结设置，DeepSeek Flash/max 不变。见 docs/run-policy.md；真实任务证据在 docs/performance-policy-5.19.0.json，未证明整体 11 倍。
+
+5.20 / 插件 2.19：DeepSeek DSH v4 可用 runs trace 或 canvas_run_status view=trace/nodeId 做只读数字诊断；需受保护 profile.nativeTrace 的目录配置及原生 python3/zstd。验证本次回执、唯一原生会话与工作目录，只返回计数和时间；不传模型/思考/工具文本，不改运行状态。用量与工具区间均为已知下限，取消不算成功。最近同入口已验证模型的摘要可供最强负责人分工参考，重启后可重读。Flash/max 不变。见 docs/native-trace.md。
