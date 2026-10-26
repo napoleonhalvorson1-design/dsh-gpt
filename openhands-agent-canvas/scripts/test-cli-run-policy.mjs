@@ -28,6 +28,8 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({state, revision: 7}));
   } else if (req.method === 'POST' && req.url === '/api/runs') {
     res.end(JSON.stringify({id: 'fake-run', status: 'queued'}));
+  } else if(req.method==='GET'&&req.url==='/api/runs/fixture-run/trace?nodeId=build'){
+    res.end(JSON.stringify({trace:{available:false}}));
   } else {
     res.writeHead(405).end(JSON.stringify({error: 'Unexpected request'}));
   }
@@ -95,6 +97,7 @@ try {
     assert.match(JSON.parse(result.stdout).error, /--(?:planning-)?complexity/);
     assert.equal(requests.length, before, 'Invalid complexity must fail before submitting');
   }
+  const trace=await run(['runs','trace','--id','fixture-run','--node','build']);assert.equal(trace.code,0);assert.equal(requests.at(-1).path,'/api/runs/fixture-run/trace?nodeId=build');assert.equal(requests.at(-1).auth,`Bearer ${token}`);
   const help = await run(['help']);
   assert.equal(help.code, 0);
   assert.match(JSON.parse(help.stdout).usage.find(line => line.startsWith('canvas runs start ')),

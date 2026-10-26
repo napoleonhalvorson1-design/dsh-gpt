@@ -24,7 +24,7 @@ export async function nativeTrace(run,nodeId,bundle,profiles){
  const key=run.id+'/'+node.id+'/'+node.conversationId;if(active.has(key))return active.get(key);
  const task=(async()=>{try{
   const input=Buffer.from(JSON.stringify({root:profile.nativeTrace.root,workspace:node.workspace,requestId:node.conversationId,model:selection.model,effort:selection.effort})).toString('base64');
-  const command="python3 - "+input+" <<'CANVAS_DSH_TRACE'\n"+script+"\nCANVAS_DSH_TRACE";
+  const command="/usr/bin/python3 -I - "+input+" <<'CANVAS_DSH_TRACE'\n"+script+"\nCANVAS_DSH_TRACE";
   const response=await fetch(profile.baseUrl+'/api/bash/execute_bash_command',{method:'POST',headers:{'X-Session-API-Key':profile.apiKey,'Content-Type':'application/json'},body:JSON.stringify({command,timeout:10}),redirect:'manual',signal:AbortSignal.timeout(12000)});
   if(!response.ok)return {...base,trace:{available:false,reason:'trace-unavailable'}};
   const text=await response.text();if(text.length>65536)return {...base,trace:{available:false,reason:'trace-limit'}};const result=JSON.parse(text);

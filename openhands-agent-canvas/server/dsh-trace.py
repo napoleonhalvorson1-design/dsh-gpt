@@ -44,7 +44,7 @@ def summarize(rows,now):
 
 def read_log(path):
  if path.is_symlink() or not path.is_file() or path.stat().st_size>LIMIT:raise ValueError('trace-limit')
- child=subprocess.Popen(['zstd','-dc','--',str(path)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+ child=subprocess.Popen(['/usr/bin/zstd','-dc','--',str(path)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
  try:
   data=bytearray()
   while chunk:=child.stdout.read(65536):
