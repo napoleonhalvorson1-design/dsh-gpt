@@ -103,6 +103,7 @@ elif mode=='merge':
   conflicts.append({'path':path,'structural':True,'variants':[{'parent':'merged','sha256':digest(value),'deleted':False,'path':target}]})
  report={'schemaVersion':1,'runId':root,'nodeId':spec['nodeId'],'base':spec.get('baseId'),'parents':[p['id'] for p in spec['parents']],'conflicts':conflicts,'sources':spec.get('sources',[]),'lineage':spec.get('lineage',[]),'scheduler':spec.get('scheduler')}
  if spec.get('repository'):report['repository']=spec['repository']
+ if spec.get('sourceRun'):report['sourceRun']=spec['sourceRun']
  out['.canvas-collaboration/handoff.json']=(json.dumps(report,ensure_ascii=False,indent=2)+'\n').encode()
  write(archive,root,out);print(json.dumps(report))
 elif mode=='plan':

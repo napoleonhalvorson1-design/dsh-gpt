@@ -10,6 +10,7 @@ import {EventWakeup} from './event-wakeup.mjs';
 import {executionHistory} from './execution-history.mjs';
 import {budgetExpired,defaultPlannerPolicy,compileExecutionPolicy} from './execution-policy.mjs';
 import {recoverBudget} from './budget-recovery.mjs';
+import {pinRunSource} from './run-source.mjs';
 import {placePlanner} from './planner-placement.mjs';
 import {validateAdaptiveSeed,planningInstructions,compileAdaptivePlan,compactHandoffs,validateDirectDelivery} from './adaptive.mjs';
 export {ACTIVE,validateWorkflow};
@@ -23,7 +24,7 @@ function dependencies(flow){
 }
 export class Engine extends SerialEngine {
  constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.nodeActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false;this.clock=options.clock||Date.now}
- close(){super.close();this.repositorySource?.close();for(const feed of this.eventWakeups.values())feed.close();this.eventWakeups.clear()}
+ close(){super.close();this.repositorySource?.close();this.runSource?.close();for(const feed of this.eventWakeups.values())feed.close();this.eventWakeups.clear()}
  tick(){
   if(this.suppressTick||this.closed)return;
   const ids=this.store.runnable(),recovering=run=>Object.values(run?.nodes||{}).some(n=>!n.modelCompleted&&['running','reconnecting'].includes(n.status)&&(n.handle||n.submittedAt));
@@ -37,10 +38,13 @@ export class Engine extends SerialEngine {
  }
  enqueue(input,config){
   const existing=this.store.run(input.id);if(existing)return existing;
-  const flow=validateWorkflow(input.workflow);validateAdaptiveSeed(flow);const observations=config.teamProfiles?executionHistory(this.store,config.teamProfiles):[],initialPolicy=defaultPlannerPolicy(flow,config,observations);config=placePlanner(this.store,flow,config);const plannerPolicy=defaultPlannerPolicy(flow,config,observations);if(plannerPolicy&&initialPolicy)plannerPolicy.budgetSeconds=Math.max(plannerPolicy.budgetSeconds,initialPolicy.budgetSeconds);if(plannerPolicy){const definition=flow.nodes.find(n=>n.id==='plan');definition.executionPolicy=plannerPolicy;config={...config,nodeConfigs:{...config.nodeConfigs,plan:compileExecutionPolicy({...config.nodeConfigs.plan},definition,flow,config.teamProfiles)}};}if(flow.collaborationMode==='adaptive'&&!config.teamProfiles)throw new ApiError('自动协作尚未配置可用 AI 团队。',409);const deps=dependencies(flow),parallel=flow.nodes.some(n=>n.executionPolicy)||!!flow.repository&&config.mode==='remote'||!!flow.modelMode||!!config.selection||Object.values(config.nodeConfigs||{}).some(c=>c.selection)||flow.executionMode==='parallel'||Object.values(deps).filter(p=>!p.length).length>1||Object.values(deps).some(p=>p.length>1)||Object.keys(deps).some(id=>Object.values(deps).filter(p=>p.includes(id)).length>1);
+  const flow=validateWorkflow(input.workflow);validateAdaptiveSeed(flow);const artifactSource=pinRunSource(this.store,this.storage,input,flow);const observations=config.teamProfiles?executionHistory(this.store,config.teamProfiles):[],initialPolicy=defaultPlannerPolicy(flow,config,observations);config=placePlanner(this.store,flow,config);const plannerPolicy=defaultPlannerPolicy(flow,config,observations);if(plannerPolicy&&initialPolicy)plannerPolicy.budgetSeconds=Math.max(plannerPolicy.budgetSeconds,initialPolicy.budgetSeconds);if(plannerPolicy){const definition=flow.nodes.find(n=>n.id==='plan');definition.executionPolicy=plannerPolicy;config={...config,nodeConfigs:{...config.nodeConfigs,plan:compileExecutionPolicy({...config.nodeConfigs.plan},definition,flow,config.teamProfiles)}};}if(flow.collaborationMode==='adaptive'&&!config.teamProfiles)throw new ApiError('自动协作尚未配置可用 AI 团队。',409);const deps=dependencies(flow),parallel=flow.nodes.some(n=>n.executionPolicy)||!!flow.baseRunId||!!flow.repository&&config.mode==='remote'||!!flow.modelMode||!!config.selection||Object.values(config.nodeConfigs||{}).some(c=>c.selection)||flow.executionMode==='parallel'||Object.values(deps).filter(p=>!p.length).length>1||Object.values(deps).some(p=>p.length>1)||Object.keys(deps).some(id=>Object.values(deps).filter(p=>p.includes(id)).length>1);
   if(parallel&&flow.nodes.filter(isAgent).some(n=>(config.nodeConfigs?.[n.id]||config).mode!=='remote'))throw new ApiError('并行文件协作需要自托管 OpenHands 执行入口。',409);
-  this.suppressTick=true;let run;try{run=super.enqueue({...input,workflow:flow},config)}finally{this.suppressTick=false}
+  this.suppressTick=true;let run,transaction=false;const atomic=!!artifactSource;
+  try{if(atomic){this.store.db.exec('BEGIN IMMEDIATE');transaction=true}run=super.enqueue({...input,workflow:flow},config);
+  if(artifactSource){run.artifactSource=artifactSource;this.store.saveRun(run)}
   if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive')run.adaptivePlan={status:'pending',plannerId:'plan'};run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
+  if(transaction){this.store.db.exec('COMMIT');transaction=false}}catch(error){if(transaction)this.store.db.exec('ROLLBACK');throw error}finally{this.suppressTick=false}
   this.tick();return this.store.run(run.id);
  }
  patch(id,fn,options){if(this.closed)return this.store.run(id);const run=this.store.run(id);if(!run)return null;fn(run);return this.store.saveRun(run,options)}
@@ -50,7 +54,7 @@ export class Engine extends SerialEngine {
   run.nodes[node.id]=next;return this.store.saveRun(run);
  }
  stop(id){
-  this.repositorySource?.abort(id);
+  this.repositorySource?.abort(id);this.runSource?.abort(id);
   for(const [key,feed] of this.eventWakeups)if(key.startsWith(id+'/'))feed.wake();
   const old=this.store.run(id);
   if(old?.schedulerVersion===2&&old.status==='failed'&&Object.values(old.nodes).some(n=>!n.modelCompleted&&!n.stopConfirmed&&(n.handle||n.submittedAt))){this.patch(id,r=>{r.cancelRequested=true;r.status='stopping'});this.tick();return this.store.run(id)}
@@ -142,12 +146,13 @@ export class Engine extends SerialEngine {
   const parents=node.dependencies.map(p=>run.nodes[p]),sets=parents.map(p=>this.ancestors(run,p.id)),common=sets.length?run.order.filter(id=>sets.every(s=>s.has(id))):[];
   const maximal=common.filter(id=>!common.some(other=>other!==id&&this.ancestors(run,other).has(id)));
   if(maximal.length>1)throw new ApiError('汇合存在多个独立共同祖先，请先添加整合节点形成明确的文件基线。',409);
-  const baseId=maximal[0],repository=!baseId&&run.workflow?.repository?await this.repositorySource?.get(run):null;
-  if(!baseId&&run.workflow?.repository&&!repository)throw new ApiError('仓库源代码导入尚未配置，未启动 AI。',409);
+  const baseId=maximal[0],previous=!baseId&&run.workflow?.baseRunId?await this.runSource?.get(run):null,repository=!baseId&&!run.workflow?.baseRunId&&run.workflow?.repository?await this.repositorySource?.get(run):null;
+  if(!baseId&&run.workflow?.baseRunId&&!previous)throw new ApiError('上轮成果导入尚未配置，未启动 AI。',409);
+  if(!baseId&&!run.workflow?.baseRunId&&run.workflow?.repository&&!repository)throw new ApiError('仓库源代码导入尚未配置，未启动 AI。',409);
   const archives=await Promise.all(parents.map(async parent=>({id:parent.id,archive:await this.archiveFor(run,parent)}))),base=baseId?(archives.find(p=>p.id===baseId)?.archive||await this.archiveFor(run,run.nodes[baseId])):undefined;
   const describe=p=>({id:p.id,name:p.name,profileId:p.profileId,server:p.server,model:p.modelUsed,conversationId:p.conversationId,submittedAt:p.submittedAt,finishedAt:p.finishedAt,checkpoint:p.checkpoint||null});
   const sources=parents.map(describe),lineage=run.order.filter(id=>sets.some(s=>s.has(id))).map(id=>describe(run.nodes[id]));
-  return mergeArchives({runId:run.id,nodeId:node.id,directory:this.handoffDirectory,cacheKey:node.fallbackCount?node.id+'-attempt-'+(node.fallbackCount+1):node.id,parents:archives,base:base||repository?.path,baseId:baseId||(repository?'repository':undefined),sources,lineage,repository:repository?.metadata||run.repositorySource,scheduler:{version:run.schedulerVersion,maxParallelNodes:run.maxParallelNodes}});
+  return mergeArchives({runId:run.id,nodeId:node.id,directory:this.handoffDirectory,cacheKey:node.fallbackCount?node.id+'-attempt-'+(node.fallbackCount+1):node.id,parents:archives,base:base||previous?.path||repository?.path,baseId:baseId||(previous?'previous-run':repository?'repository':undefined),sources,lineage,sourceRun:previous?{id:previous.metadata.sourceRunId,sha256:previous.metadata.archiveSha256}:run.artifactSource?{id:run.artifactSource.sourceRunId,sha256:run.artifactSource.archiveSha256}:undefined,repository:repository?.metadata||run.repositorySource,scheduler:{version:run.schedulerVersion,maxParallelNodes:run.maxParallelNodes}});
  }
  async executeNode(id,nodeId){
   let run=this.store.run(id),node={...run.nodes[nodeId]},bundle=this.store.config(id),config=bundle.nodeConfigs?.[nodeId]||bundle;
@@ -174,7 +179,7 @@ export class Engine extends SerialEngine {
     if(config.selection?.mode==='auto'&&['auto','planner'].includes(config.selection.source)&&node.mergeReport?.conflicts?.length){config={...config,selection:chooseModel(config,{...definition,modelPolicy:undefined},{...run.workflow,taskComplexity:'complex'},config.policyModels)};config.selection.reason+=' · 文件冲突升级';const latest=this.store.config(id);latest.nodeConfigs[node.id]=config;this.store.setConfig(id,latest);node.modelSelection=config.selection;node.modelRequested=config.selection.model;node.reasoningEffort=config.selection.effort;this.patchNode(id,node)}
     const conflictInstructions=node.mergeReport?.conflicts?.length?'\n\n存在文件冲突，先读取 .canvas-collaboration/handoff.json。各分支文件完整保存在 .canvas-collaboration/inputs/<parent>/<path>，基线在 .canvas-collaboration/base/。请整合解决，禁止忽略冲突；写 .canvas-collaboration/resolutions.json：{"resolutions":{"相对路径":{"source":"custom 或 parent ID 或 base 或 delete","sha256":"最终文件真实SHA-256（删除用null）","reason":"解决原因"}}}}。每个冲突路径必须有记录，整合后用 sha256sum 校验。':'';
     const collaborationInstructions=node.id==='plan'&&run.adaptivePlan?.status==='pending'?planningInstructions(bundle.teamProfiles,run.workflow,executionHistory(this.store,bundle.teamProfiles)):'';
-    const source=this.store.run(id).repositorySource,repositoryInstructions=source?'\n\n仓库源代码已按提交 '+source.commitSha+' 装入当前目录，来源 '+source.repository+'（'+source.ref+'）。基于此快照实现需求，保留无关文件；仓库凭据由控制器管理。':'';
+    const previous=this.store.run(id).artifactSource,source=this.store.run(id).repositorySource,repositoryInstructions=previous?'\n\n上一轮成功运行 '+previous.sourceRunId+' 的完整成果已按 SHA-256 校验并装入当前目录。基于已有代码和测试完成本次增量需求，保留无关行为及文件；不重复生成整个项目。':source?'\n\n仓库源代码已按提交 '+source.commitSha+' 装入当前目录，来源 '+source.repository+'（'+source.ref+'）。基于此快照实现需求，保留无关文件；仓库凭据由控制器管理。':'';
     const prompt='你是自托管引擎派发的执行分支，接入已完成；直接在本次隔离目录完成给定职责。协作分工通过本次 plan.json 交给引擎派发。\n\n用户任务：\n'+run.workflow.task+'\n\n你的职责：\n'+definition.prompt+(parents?'\n\n'+parents:'')+'\n\n你在隔离的分支工作目录：'+node.workspace+'。其他 AI 可能同时工作；只修改自己负责的文件，不修改用户其他目录。上游文件已经合并到此目录，交接元数据在 .canvas-collaboration/handoff.json。保留上游内容，给出文件、接口契约与下游注意事项。'+repositoryInstructions+conflictInstructions+collaborationInstructions;
     this.log(id,node.id,'正在并行提交至 '+(node.profileLabel||node.profileId)+'。');node.submittedAt??=new Date().toISOString();this.patchNode(id,node);
     try{node.handle=await startConversation({...config,workspace:node.workspace},{conversationId:node.conversationId,prompt,system:run.workflow.coordinationPolicy==='lean'?'你是引擎调度的执行分支，在当前目录直接完成给定职责；协作分工通过本次 plan.json 交给引擎派发。优先实现需求，说明简短，必要验证一次。':definition.prompt,model:definition.liveModel,temperature:definition.temperature,tools:definition.tools,repository:run.workflow.repository,branch:run.workflow.branch,maxIterations:run.workflow.maxIterations})}

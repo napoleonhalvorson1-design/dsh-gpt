@@ -12,6 +12,7 @@ import {Store} from './store.mjs';
 import {createDevelopmentProject} from './development.mjs';
 import {Connectors} from './connectors.mjs';
 import {Engine,ACTIVE,validateWorkflow} from './engine.mjs';
+import {RunSources} from './run-source.mjs';
 import {RepositorySources} from './repository-source.mjs';
 import {analyzeRun} from '../shared/run-performance.mjs';
 import {ApiError,validateConfig,upstream,cleanText} from '../shared/openhands.mjs';
@@ -23,6 +24,7 @@ export function createControl({database,apiKey,encryptionKey,pollMs=3000,default
   if(profiles.entries.size)store.setSetting('ai-profiles',{defaultId:profiles.defaultId,items:[...profiles.entries.values()]});else{const saved=store.setting('ai-profiles');if(saved)profiles=new Profiles(saved.items,saved.defaultId)}
   const connectors=new Connectors(store,{storage,profiles,engine,environment:storageEnvironment});
   engine.repositorySource=new RepositorySources({store,storage,connectors,directory:dirname(database)});
+  engine.runSource=new RunSources({store,storage,directory:dirname(database)});
   storage.connectors=connectors;
   const authenticate=req=>{const received=Buffer.from(req.headers.authorization||''),expected=Buffer.from('Bearer '+apiKey);return received.length===expected.length&&timingSafeEqual(received,expected)};
   const json=(res,data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data))};
@@ -82,7 +84,7 @@ export function createControl({database,apiKey,encryptionKey,pollMs=3000,default
       if(path==='/projects'&&method==='GET')return json(res,{items:store.projects()});
       const projectMatch=path.match(/^\/projects\/([a-zA-Z0-9_-]{1,100})$/);
       if(projectMatch){const id=projectMatch[1];if(method==='GET'){const p=store.project(id);if(!p)throw new ApiError('项目不存在。',404);return json(res,p)}
-        if(method==='PUT'){const data=await body(req);if(data.state?.preset==='five-ai'){if(Number(data.expectedRevision)!==0)throw new ApiError('五 AI 快捷创建仅用于新项目；修改请读取当前项目后保存完整工作流。');return json(res,createDevelopmentProject(store,profiles,{id,title:data.state.title,task:data.state.task,modelMode:data.state.modelMode,reasoningEffort:data.state.reasoningEffort,repository:data.state.repository,branch:data.state.branch,githubConnectionId:data.state.githubConnectionId}))}const flow=validateWorkflow(data.state);delete flow.order;const snapshot={...flow,projectId:id};const saved=store.putProject(id,snapshot,Number(data.expectedRevision)||0);if(!saved)throw new ApiError('此项目已在另一台设备更新，请重新载入或保留为副本。',409);return json(res,saved)}
+        if(method==='PUT'){const data=await body(req);if(data.state?.preset==='five-ai'){if(Number(data.expectedRevision)!==0)throw new ApiError('五 AI 快捷创建仅用于新项目；修改请读取当前项目后保存完整工作流。');return json(res,createDevelopmentProject(store,profiles,{id,title:data.state.title,task:data.state.task,modelMode:data.state.modelMode,reasoningEffort:data.state.reasoningEffort,repository:data.state.repository,branch:data.state.branch,githubConnectionId:data.state.githubConnectionId,runtimeContext:data.state.runtimeContext,baseRunId:data.state.baseRunId}))}const flow=validateWorkflow(data.state);delete flow.order;const snapshot={...flow,projectId:id};const saved=store.putProject(id,snapshot,Number(data.expectedRevision)||0);if(!saved)throw new ApiError('此项目已在另一台设备更新，请重新载入或保留为副本。',409);return json(res,saved)}
         if(method==='DELETE'){if(store.listRuns(id).some(r=>ACTIVE.has(r.status)))throw new ApiError('项目仍有运行中的任务，请先停止运行。',409);store.deleteProject(id);return json(res,{ok:true})}}
       if(path==='/runs'&&method==='GET')return json(res,{items:store.listRuns(url.searchParams.get('projectId')||undefined).map(runSummary)});
       if(path==='/runs'&&method==='POST'){const data=await body(req),run=engine.enqueue(data,profiles.compile(config(data.backend),data.workflow));return json(res,safeRun(run),202)}

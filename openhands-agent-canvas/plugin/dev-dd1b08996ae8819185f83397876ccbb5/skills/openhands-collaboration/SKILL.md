@@ -121,3 +121,7 @@ focused 限该次 Codex ACP 子进程的 App、插件及技能目录，保留模
 ## 新规划任务分散（5.16 / 插件 2.15）
 
 strongest 新运行按工作台保留量选择同模型、同深度的已验证入口，手动设置不改，已开始的任务继续原路由。预览只读，实际提交按最新保留量决定；modelSelection.placement 不是实际模型确认。继续时保留原规划入口及冻结策略，配置地址改变须先恢复原地址。保留量不代表服务商队列或账号容量，不能据此宣称整体快 11 倍。见 [规划说明](references/planner-placement.md)。
+
+## 在已有成果上增量开发（5.17 / 插件 2.16）
+
+本项目的新需求可用 canvas_start_run 的 baseRunId 或 CLI --base-run，继承同项目上轮成功且已校验入桶的完整代码与测试，再实现改动；未完成任务仍使用 resume。先读 [增量开发](references/incremental-development.md)，不要重新生成已有项目。run.artifactSource 给出固定来源与新基线哈希，存储失败不重跑旧 AI。
