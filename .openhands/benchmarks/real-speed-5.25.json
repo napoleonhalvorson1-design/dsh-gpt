@@ -1,0 +1,178 @@
+{
+  "objective": "Improve capability and whole-task speed by 1000% (11x)",
+  "goalAchieved": false,
+  "engineVersion": "5.25.0",
+  "sourceCommit": "e5cf31f4a369f2ee52ad5be14eaafed0c948037f",
+  "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+  "scope": "Same original module-development requirements, real native models/files and S3; one initial attempt plus one targeted repair from the verified original checkpoint. Benchmark recovery was operated by Codex, not an autonomous engine validation gate.",
+  "baseline": {
+    "id": "engine-performance-baseline-20261027-r1",
+    "source": "/tmp/canvas-speed-baseline-5.6.0",
+    "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+    "status": "succeeded",
+    "createdAt": "2026-10-26T18:19:57.595Z",
+    "finishedAt": "2026-10-26T18:28:05.647Z",
+    "elapsedMs": 488052
+  },
+  "attempts": [
+    {
+      "id": "engine-performance-5-25-20261027-r1",
+      "status": "succeeded",
+      "createdAt": "2026-10-26T23:46:08.788Z",
+      "finishedAt": "2026-10-26T23:47:31.025Z",
+      "directDelivery": true,
+      "model": "gpt-6-astra",
+      "effort": "medium",
+      "selectionApplied": true,
+      "modelUsage": {
+        "schemaVersion": 1,
+        "requestId": "dfefbb02-3e9b-4220-a963-b91ecbe9bdae",
+        "model": "gpt-6-astra",
+        "effort": "medium",
+        "scope": "acp-prompts-including-tools",
+        "elapsedMs": 71652,
+        "completedPrompts": 1,
+        "stopReason": "end_turn",
+        "tokens": {
+          "totalTokens": 104515,
+          "inputTokens": 16591,
+          "cachedReadTokens": 83456,
+          "cachedWriteTokens": 0,
+          "outputTokens": 4468,
+          "thoughtTokens": 233
+        }
+      },
+      "checkpoint": {
+        "key": "openhands-canvas/performance/engine-performance-5-25-20261027-r1/runs/engine-performance-5-25-20261027-r1/stages/plan/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "engine-performance-5-25-20261027-r1",
+        "nodeId": "plan",
+        "conversationId": "dfefbb02-3e9b-4220-a963-b91ecbe9bdae",
+        "sha256": "d4c24d79124943efccffec3d57aa76076bb3d5b08a8e043afe600d45c5d9c53d",
+        "size": 5878,
+        "capturedAt": "2026-10-26T23:47:22.720Z",
+        "historical": false
+      },
+      "sourceRunId": null,
+      "sourceArchiveSha256": null
+    },
+    {
+      "id": "engine-performance-5-25-20261027-fix1",
+      "status": "succeeded",
+      "createdAt": "2026-10-26T23:50:59.834Z",
+      "finishedAt": "2026-10-26T23:51:50.648Z",
+      "directDelivery": true,
+      "model": "gpt-6-astra",
+      "effort": "low",
+      "selectionApplied": true,
+      "modelUsage": {
+        "schemaVersion": 1,
+        "requestId": "1a96837f-3485-40eb-800f-b60b1fa7b2f3",
+        "model": "gpt-6-astra",
+        "effort": "low",
+        "scope": "acp-prompts-including-tools",
+        "elapsedMs": 32072,
+        "completedPrompts": 1,
+        "stopReason": "end_turn",
+        "tokens": {
+          "totalTokens": 91293,
+          "inputTokens": 16172,
+          "cachedReadTokens": 73856,
+          "cachedWriteTokens": 0,
+          "outputTokens": 1265,
+          "thoughtTokens": 33
+        }
+      },
+      "checkpoint": {
+        "key": "openhands-canvas/performance/engine-performance-5-25-20261027-r1/runs/engine-performance-5-25-20261027-fix1/stages/plan/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "engine-performance-5-25-20261027-fix1",
+        "nodeId": "plan",
+        "conversationId": "1a96837f-3485-40eb-800f-b60b1fa7b2f3",
+        "sha256": "9fc9e81d26296fb674c19a2785fcfac5073125a70232d48ae440cbfa19b50ae4",
+        "size": 6413,
+        "capturedAt": "2026-10-26T23:51:42.173Z",
+        "historical": false
+      },
+      "sourceRunId": "engine-performance-5-25-20261027-r1",
+      "sourceArchiveSha256": "90a0f177f6641bcc5974de51a389fc7d9a92b7f7a0d65e5730165b45632cca5c"
+    }
+  ],
+  "timing": {
+    "initialRunMs": 82237,
+    "repairRunMs": 50814,
+    "summedEngineRunMs": 133051,
+    "feedbackGapMs": 208809,
+    "firstStartToRepairedDeliveryMs": 341860
+  },
+  "comparison": {
+    "baselineRunMs": 488052,
+    "currentFirstStartToRepairedDeliveryMs": 341860,
+    "speedFactor": 1.4276,
+    "speedIncreasePercent": 42.76,
+    "requestedSpeedFactor": 11,
+    "achieved": false
+  },
+  "qualification": {
+    "initialPassed": 9,
+    "totalChecks": 10,
+    "initialFailure": [
+      "invalid calendar date remains unknown"
+    ],
+    "baselinePassed": 10,
+    "repairedPassed": 10,
+    "bothOwnTestsPassed": true,
+    "repairedFiles": [
+      "shared/run-performance.mjs",
+      "scripts/test-run-performance.mjs"
+    ],
+    "originalDocumentationPreserved": true
+  },
+  "limitations": [
+    "One sequential sample and a historical baseline several hours earlier; service latency and cache conditions are uncontrolled.",
+    "Automatic orchestration can choose different model/depths; selections are recorded rather than assumed equal.",
+    "The initial engine-success state did not prove domain acceptance: independent checks found a calendar-date defect.",
+    "Current comparison retains the entire observed feedback gap before repair; independent post-run artifact verification and GitHub CI durations are outside run clocks for both versions.",
+    "Ten common checks and each artifacts own tests are evidence, not an exhaustive equivalence proof.",
+    "No claim of universal speedup or 11x whole-task speed."
+  ],
+  "artifactFiles": [
+    {
+      "path": ".openhands/benchmarks/artifacts/5.6/shared/run-performance.mjs",
+      "sha256": "dd3100a923affaafa3dc5507bd6a47269cc22ea31b86897478247037f293fc13",
+      "bytes": 10647
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.6/scripts/test-run-performance.mjs",
+      "sha256": "8454b519d0252e3769d49e776eb5d57fb7ee74485c5a1deae55601b855c7a735",
+      "bytes": 8919
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.6/docs/run-performance.md",
+      "sha256": "e449024e0d72226f669c3c5ad0c2f441cd366cd833b8f56dbf447b0063ff10d7",
+      "bytes": 7394
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.25-fixed/shared/run-performance.mjs",
+      "sha256": "474fadd1e54d232a0282e4db7ca2a7ca8ce0d6fbb5a59d92e703b81824b8b583",
+      "bytes": 6602
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.25-fixed/scripts/test-run-performance.mjs",
+      "sha256": "e38bf9f32a0520579c8b95e299511d956f06187783b73570c219cd21d7a6100d",
+      "bytes": 4268
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.25-fixed/docs/run-performance.md",
+      "sha256": "c86c739d5042f9d07fb7d5cfdd258d4072fc72aabd3af1fb843baa86078ffe0c",
+      "bytes": 3538
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.25-rejected/shared/run-performance.mjs",
+      "sha256": "b878abdce0bfa8988c7509546f507cf0bd22f339c84a5be2c0b9e42ae76cd016",
+      "bytes": 5836
+    }
+  ]
+}
