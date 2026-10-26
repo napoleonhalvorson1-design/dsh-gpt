@@ -24,7 +24,7 @@ function dependencies(flow){
  return Object.fromEntries(flow.nodes.filter(isAgent).map(n=>[n.id,[...new Set(nearest(n.id))]]));
 }
 export class Engine extends SerialEngine {
- constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.nodeActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false;this.clock=options.clock||Date.now}
+ constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.maxDagActive=options.maxDagActive??10;this.maxStageActive=options.maxStageActive??10;this.nodeActive=new Set();this.stageActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false;this.clock=options.clock||Date.now}
  close(){super.close();this.repositorySource?.close();this.runSource?.close();for(const feed of this.eventWakeups.values())feed.close();this.eventWakeups.clear()}
  tick(){
   if(this.suppressTick||this.closed)return;
@@ -32,9 +32,14 @@ export class Engine extends SerialEngine {
   // Reserve already submitted inference before starting anything after a controller restart.
   for(const id of ids){const run=this.store.run(id);if(run.schedulerVersion===2)for(const n of Object.values(run.nodes))if(!n.modelCompleted&&['running','reconnecting'].includes(n.status)&&(n.handle||n.submittedAt))this.nodeActive.add(id+'/'+n.id)}
   ids.sort((a,b)=>Number(recovering(this.store.run(b)))-Number(recovering(this.store.run(a))));
+  let dags=0,legacy=0;for(const id of this.active){if(this.store.run(id)?.schedulerVersion===2)dags++;else legacy++;}
   for(const id of ids){
-   if(this.active.size>=this.maxActive)break;if(this.active.has(id))continue;this.active.add(id);
-   this.execute(id).catch(error=>{if(this.closed)return;const run=this.store.run(id);if(run&&ACTIVE.has(run.status)){this.patch(id,r=>{r.status='failed';r.error=error.message});this.log(id,'workflow',error.message,{error:true})}}).finally(()=>this.active.delete(id));
+   if(this.active.has(id))continue;const dag=this.store.run(id)?.schedulerVersion===2;
+   // A DAG waiting for its bucket barrier must not consume a legacy workflow
+   // admission slot. Bound resident DAGs and all outstanding stage work separately.
+   if(dag?dags>=this.maxDagActive:legacy>=this.maxActive)continue;
+   if(dag)dags++;else legacy++;this.active.add(id);
+   this.execute(id).catch(error=>{if(this.closed)return;const run=this.store.run(id);if(run&&ACTIVE.has(run.status)){this.patch(id,r=>{r.status='failed';r.error=error.message});this.log(id,'workflow',error.message,{error:true})}}).finally(()=>{this.active.delete(id);this.tick()});
   }
  }
  enqueue(input,config){
@@ -99,7 +104,9 @@ export class Engine extends SerialEngine {
     for(const nodeId of run.order){
      run=this.store.run(id);const node=run.nodes[nodeId];if(run.cancelRequested)break;
      if(tasks.has(nodeId)||this.ready(node)||node.budgetRecovery?.state!=='stopping'&&(['failed','paused'].includes(node.status)||node.error))continue;
-     if(tasks.size>=run.maxParallelNodes)break;
+     const inferenceTasks=[...tasks.keys()].filter(id=>!run.nodes[id].modelCompleted).length;
+     if(!node.modelCompleted&&inferenceTasks>=run.maxParallelNodes)continue;
+     if(this.stageActive.size>=this.maxStageActive&&!this.stageActive.has(id+'/'+nodeId))continue;
      if(!node.modelCompleted&&this.nodeActive.size>=this.maxNodeActive&&!this.nodeActive.has(id+'/'+nodeId))continue;
      if(!(node.dependencies||[]).every(p=>this.ready(run.nodes[p])))continue;
      this.launch(id,node,tasks,false);
@@ -110,7 +117,7 @@ export class Engine extends SerialEngine {
      if(failed.length){this.patch(id,r=>{r.status='failed';r.error=failed.map(n=>n.name+'：'+(n.error||'执行失败')).join('\n');r.activeNodeIds=[]});return}
      if(paused.length){this.patch(id,r=>{r.status='awaiting_input';r.error='分支等待后端确认或补充输入，处理后可继续。';r.activeNodeIds=[]});return}
      // Other workflows can hold the global slots. Keep waiting, without recording a false failure.
-     if(this.nodeActive.size<this.maxNodeActive)throw new ApiError('工作流依赖无法继续，请检查未完成的上游节点。',409);
+     if(this.nodeActive.size<this.maxNodeActive&&this.stageActive.size<this.maxStageActive)throw new ApiError('工作流依赖无法继续，请检查未完成的上游节点。',409);
     }
    }
    run=this.store.run(id);const active=[...tasks.keys()],completed=Object.values(run.nodes).filter(n=>this.ready(n)).length;
@@ -119,12 +126,12 @@ export class Engine extends SerialEngine {
   }}finally{if(this.closed)await Promise.allSettled([...tasks.values()])}
  }
  launch(id,node,tasks,stopping){
-  const key=id+'/'+node.id;if(!node.modelCompleted)this.nodeActive.add(key);
+  const key=id+'/'+node.id;this.stageActive.add(key);if(!node.modelCompleted)this.nodeActive.add(key);
   // Reserve the branch synchronously so another tick cannot schedule it twice.
   if(!stopping)this.patch(id,r=>{if(r.nodes[node.id].status!=='succeeded')r.nodes[node.id].status='running';r.nodes[node.id].startedAt??=new Date().toISOString()});
   const promise=(stopping?this.stopNode(id,node):this.executeNode(id,node.id)).catch(error=>{
    if(this.closed)return;const run=this.store.run(id),saved=run?.nodes[node.id];if(!saved)return;this.patchNode(id,{id:node.id,status:run.cancelRequested?'reconnecting':saved.modelCompleted?'succeeded':'failed',error:error.message});this.log(id,node.id,error.message,{error:true});
-  }).finally(()=>{tasks.delete(node.id);this.nodeActive.delete(key)});tasks.set(node.id,promise);
+  }).finally(()=>{tasks.delete(node.id);this.nodeActive.delete(key);this.stageActive.delete(key)});tasks.set(node.id,promise);
  }
  async expandPlan(id){
   let run=this.store.run(id);if(run.adaptivePlan?.status!=='pending'||run.cancelRequested)return;

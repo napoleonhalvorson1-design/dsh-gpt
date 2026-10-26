@@ -137,3 +137,8 @@ strongest 新运行按工作台保留量选择同模型、同深度的已验证�
 ## 原生等待诊断（5.20 / 插件 2.19）
 
 DeepSeek 阶段等待较长时，用 canvas_run_status 的 view=trace、nodeId，或 CLI runs trace --id RUN --node NODE 读取已有数字记录，再决定等待、停止或调整下次分工。先读 [原生诊断](references/native-trace.md)。不读取或转述思考内容，不把已知下限当完整账单，不把原生 turnEnded 当交付。最近数字可供最强负责人参考，但失败/取消不算成功样本，不因 token 大就自动停止。Flash/max 锁保持；不为诊断调用模型。
+
+
+## 推理与保存分别限流（5.21 / 插件 2.20）
+
+独立节点可与已完成模型的快照保存重叠；maxParallelNodes 只限制本运行的准备/推理。全局仍最多 5 个准备/推理节点，另有限制保存积压的阶段总量。真正依赖仍等待 SHA-256 校验与桶屏障，存储重试不重跑 AI。activeNodeIds 含正在保存的阶段，不是实际推理数。见 [调度容量](references/scheduler-capacity.md)。

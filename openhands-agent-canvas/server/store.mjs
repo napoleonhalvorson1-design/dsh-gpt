@@ -17,6 +17,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,title TEXT NOT NULL,payload TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,title TEXT NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL,config TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS runs_by_project ON runs(project_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS runs_by_status ON runs(status,created_at);
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL,node_id TEXT NOT NULL,external_id TEXT NOT NULL,payload TEXT NOT NULL,UNIQUE(run_id,node_id,external_id));
       CREATE INDEX IF NOT EXISTS events_by_run ON events(run_id,seq);`);
   }
@@ -32,7 +33,13 @@ export class Store {
   saveRun(run,{resetCancel=false}={}){const old=this.run(run.id);if(old?.cancelRequested&&!resetCancel)run.cancelRequested=true;const now=new Date().toISOString();this.db.prepare('UPDATE runs SET status=?,payload=?,revision=revision+1,updated_at=? WHERE id=?').run(run.status,JSON.stringify(run),now,run.id);return this.run(run.id)}
   setConfig(id,config){this.db.prepare('UPDATE runs SET config=? WHERE id=?').run(this.encrypt(config),id)}
   listRuns(projectId){return (projectId?this.db.prepare('SELECT id FROM runs WHERE project_id=? ORDER BY created_at DESC LIMIT 100').all(projectId):this.db.prepare('SELECT id FROM runs ORDER BY created_at DESC LIMIT 100').all()).map(r=>this.run(r.id))}
-  runnable(){return this.db.prepare("SELECT id FROM runs WHERE status IN ('queued','running','reconnecting','stopping') ORDER BY created_at LIMIT 20").all().map(r=>r.id)}
+  runnable(){
+    // Recover every submitted run, even behind a large queue. Independent DAG
+    // and legacy admission limits must not hide one another's queue candidates.
+    const active=this.db.prepare("SELECT id FROM runs WHERE status IN ('running','reconnecting','stopping') ORDER BY CASE status WHEN 'stopping' THEN 0 ELSE 1 END,created_at").all();
+    const queued=kind=>this.db.prepare("SELECT id,created_at FROM runs WHERE status='queued' AND json_extract(payload,'$.schedulerVersion') IS "+(kind===2?'2':'NOT 2')+" ORDER BY created_at LIMIT 20").all();
+    return [...active,...[...queued(2),...queued(1)].sort((a,b)=>a.created_at.localeCompare(b.created_at))].map(r=>r.id);
+  }
   addEvent(runId,nodeId,event){const id=event.id||randomBytes(12).toString('hex');const result=this.db.prepare('INSERT OR IGNORE INTO events(run_id,node_id,external_id,payload) VALUES(?,?,?,?)').run(runId,nodeId,id,JSON.stringify({...event,id,timestamp:event.timestamp||new Date().toISOString()}));if(result.changes)this.db.prepare('UPDATE runs SET revision=revision+1,updated_at=? WHERE id=?').run(new Date().toISOString(),runId)}
   events(runId,after=0){return this.db.prepare('SELECT seq,node_id,payload FROM events WHERE run_id=? AND seq>? ORDER BY seq LIMIT 200').all(runId,after).map(row=>({seq:row.seq,nodeId:row.node_id,...JSON.parse(row.payload)}))}
   setting(name){const r=this.db.prepare('SELECT value FROM settings WHERE name=?').get(name);return r?this.decrypt(r.value):null}
