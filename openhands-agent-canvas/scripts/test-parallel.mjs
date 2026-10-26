@@ -353,6 +353,42 @@ try{
  await idle();await rm(join(directory,'repositories','repository-roots'),{recursive:true,force:true});await rm(join(directory,'checkpoints','repository-roots','_canvas_repository_source.tar.gz'),{force:true});await open();await runningBranches('repository-roots');rootPlan.hold.clear();await waitRun('repository-roots','succeeded');const repositoryRootFiles=await request('/runs/repository-roots/files');
  check(!repositoryRootFiles.items.some(f=>f.path==='existing/delete.txt')&&repositoryRootFiles.items.some(f=>f.path==='existing/source.js'),'Independent roots use the repository common base so an unchanged sibling cannot resurrect a deleted source file');
  check(repositoryFixture.archives-beforeRoots.archives===1&&repositoryFixture.gets>beforeRoots.gets&&records('repository-roots').length===2,'Restart restores the verified source from S3 without another GitHub download or AI call');
+
+ // Incremental development inherits the immutable completed tree, including
+ // deletions across independent roots. The repository remains a delivery target.
+ const sourceFlow={...flow,baseRunId:'repository-roots'};
+ for(const baseRunId of ['',null,3,'../bad'])assert.throws(()=>app.engine.enqueue({id:'bad-id',projectId:'repository-roots',workflow:{...sourceFlow,baseRunId}},bundle),/标识/);
+ const saveRun=app.store.saveRun.bind(app.store);app.store.saveRun=(run,...args)=>{if(run.id==='atomic-source'&&run.artifactSource)throw Error('fixture source persistence failure');return saveRun(run,...args)};
+ assert.throws(()=>app.engine.enqueue({id:'atomic-source',projectId:'repository-roots',workflow:sourceFlow},bundle),/persistence failure/);app.store.saveRun=saveRun;
+ check(!app.store.run('atomic-source'),'Source pinning and run creation roll back together before any scheduler can see a partial run');
+ const editFlow={...rootOnlyFlow,nodes:rootOnlyFlow.nodes.filter(n=>n.id!=='b'),edges:[['start','a'],['a','end']],baseRunId:'repository-roots',repository:'owner/repo',branch:'changed-main',githubConnectionId:'missing-connection'};
+ const baseBefore=records('repository-roots').length,githubBefore={...repositoryFixture};
+ plans.set('incremental-edit',{});const edit=app.engine.enqueue({id:'incremental-edit',projectId:'repository-roots',workflow:editFlow},bundle);
+ check(edit.artifactSource.sourceRunId==='repository-roots'&&edit.artifactSource.parents.length===2,'Enqueue freezes the completed source branches and original baseline');
+ const editDone=await waitRun('incremental-edit','succeeded'),editor=records('incremental-edit','a')[0];
+ check(!editor.inherited.has('existing/delete.txt')&&editor.inherited.get('existing/source.js')?.toString()==='export const source = 1;\n','New development preserves merged deletion semantics and existing source');
+ check(editor.inherited.has('frontend/a.txt')&&editor.inherited.has('backend/b.txt')&&editor.inherited.get('existing/中文.bin')?.equals(Buffer.from([0,255,10,128])),'Every branch and binary file arrives in the incremental workspace');
+ check(!editor.inherited.has('.canvas-collaboration/plan.json')&&!editor.inherited.has('.canvas-collaboration/runtime-selection.json'),'Old coordination and model receipts never enter the new task');
+ check(editor.prompt.includes('repository-roots')&&editor.prompt.includes('增量需求')&&!editor.prompt.includes('undefined'),'Incremental prompt identifies the verified source and new responsibility');
+ const inheritedReport=JSON.parse(editor.inherited.get('.canvas-collaboration/handoff.json'));
+ check(inheritedReport.sourceRun.id==='repository-roots'&&inheritedReport.sourceRun.sha256===editDone.artifactSource.archiveSha256&&editDone.artifactSource.checkpoint.sha256===editDone.artifactSource.archiveSha256,'New input provenance and its bucket checkpoint share the normalized SHA');
+ check(records('repository-roots').length===baseBefore&&repositoryFixture.lookups===githubBefore.lookups&&repositoryFixture.archives===githubBefore.archives,'Incremental work neither reruns old AI nor fetches a moving repository');
+ const incrementalRetryPlan={failCheckpoint:'_canvas_previous_run_source'};plans.set('incremental-retry',incrementalRetryPlan);app.engine.enqueue({id:'incremental-retry',projectId:'repository-roots',workflow:editFlow},bundle);const incrementalFailed=await waitRun('incremental-retry','failed');
+ check(records('incremental-retry').length===0&&incrementalFailed.artifactSource.status==='prepared','An unpersisted incremental baseline blocks new inference');
+ const pinnedHash=incrementalFailed.artifactSource.archiveSha256,oldSource=app.store.run('repository-roots');
+ app.store.saveRun({...oldSource,status:'failed'});incrementalRetryPlan.failCheckpoint=null;
+ await idle();await open();await app.engine.resume('incremental-retry',bundle);const incrementalDone=await waitRun('incremental-retry','succeeded');
+ check(incrementalDone.artifactSource.archiveSha256===pinnedHash&&records('incremental-retry').length===1&&records('repository-roots').length===baseBefore,'Restart retries only storage using pinned source even if its mutable source row changes');app.store.saveRun(oldSource);
+ const restoredSource=await app.engine.runSource.get(app.store.run('incremental-retry'));await (await import('node:fs/promises')).writeFile(restoredSource.path,'tampered local cache');
+ const restoredAgain=await app.engine.runSource.get(app.store.run('incremental-retry'));check(createHash('sha256').update(await (await import('node:fs/promises')).readFile(restoredAgain.path)).digest('hex')===pinnedHash,'Ready baselines restore from the verified bucket rather than trusting changed local bytes');
+
+ const sourceStopGate=gate('_canvas_previous_run_source');plans.set('incremental-stop',{checkpointGate:sourceStopGate});app.engine.enqueue({id:'incremental-stop',projectId:'repository-roots',workflow:editFlow},bundle);await waitFor(()=>sourceStopGate.entered,'Incremental checkpoint upload starts');
+ await request('/runs/incremental-stop/stop','POST',{});sourceStopGate.release();await waitRun('incremental-stop','cancelled');check(records('incremental-stop').length===0,'Stop during source storage prevents every new model request');
+ const invalidSources=['missing','parallel-stop','parallel-files'];
+ for(const baseRunId of invalidSources)assert.throws(()=>app.engine.enqueue({id:'invalid-'+baseRunId,projectId:'repository-roots',workflow:{...editFlow,baseRunId}},bundle),/本项目|成功交付/);
+ assert.throws(()=>app.engine.enqueue({id:'self-source',projectId:'repository-roots',workflow:{...editFlow,baseRunId:'self-source'}},bundle),/自身/);
+ check(!app.store.run('self-source')&&!app.store.run('invalid-missing'),'Invalid sources create no run or model request');
+ const savedSetting=app.store.setting('s3');app.store.setSetting('s3',{...savedSetting,prefix:'different/'});await assert.rejects(()=>app.engine.runSource.get(app.store.run('incremental-retry')),/存储配置/);app.store.setSetting('s3',savedSetting);
  check(fixtureErrors.length===0,'All native and S3 protocol requests were valid');
  console.log(`Passed ${checks} parallel DAG, isolated workspace, common-ancestor merge, explicit conflict resolution, checkpoint barriers, binary handoff, branch/checkpoint retry, run/global concurrency limits, all-branch stop and controller restart checks.`);
 }finally{

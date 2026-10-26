@@ -45,6 +45,10 @@ async function waitFor(predicate,message){
 }
 
 try{
+ const largeSources=Array.from({length:1000},(_,i)=>({id:'source-'+i,name:'并行分支 '+i,sha256:digest(String(i)),detail:'provenance'.repeat(20)}));
+ const reports=await Promise.all(Array.from({length:6},(_,i)=>mergeArchives({runId:'run',nodeId:'large-report-'+i,directory,parents:[],sources:largeSources})));
+ for(const result of reports){assert.deepEqual(result.report.sources,largeSources);assert.equal(result.report.conflicts.length,0)}
+ check(reports.length===6,'Concurrent archive processes drain complete multi-chunk provenance reports before returning');
  const selection={requestId:'request-one',model:'strong',effort:'medium'},receipt={...selection,modelApplied:true,effortApplied:true},usage={schemaVersion:1,...selection,scope:'acp-prompts-including-tools',completedPrompts:1,elapsedMs:2000,stopReason:'end_turn',tokens:{outputTokens:100,inputTokens:'private-secret'},privateField:'private-secret'};
  const telemetry=await archive({'.canvas-collaboration/runtime-selection.json':JSON.stringify(receipt),'.canvas-collaboration/runtime-usage.json':JSON.stringify(usage)}),usageValidation=await validateMerge(telemetry,'run',{selection});check(usageValidation.modelUsage.tokens.outputTokens===100,'Bound token usage is returned from verified snapshot');check(usageValidation.modelUsage.tokens.inputTokens===null&&!JSON.stringify(usageValidation).includes('private-secret'),'Telemetry returns only valid numeric whitelist fields');
  for(const text of ['{bad',JSON.stringify({...usage,requestId:'wrong'}),JSON.stringify({...usage,elapsedMs:-1})]){const bad=await archive({'.canvas-collaboration/runtime-selection.json':JSON.stringify(receipt),'.canvas-collaboration/runtime-usage.json':text});check((await validateMerge(bad,'run',{selection})).modelUsage===null,'Optional invalid telemetry cannot invalidate good artifacts')}
