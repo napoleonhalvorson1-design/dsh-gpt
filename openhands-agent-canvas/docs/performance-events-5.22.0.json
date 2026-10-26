@@ -1,0 +1,27 @@
+{
+  "scope": "One actual native-event HTTP page of 100 outputs, real file-backed SQLite WAL synchronous=FULL; no models",
+  "samples": {
+    "before": {
+      "elapsedMs": 336.41,
+      "events": 100,
+      "outputChars": 1788
+    },
+    "after": {
+      "elapsedMs": 6.09,
+      "events": 100,
+      "outputChars": 1788
+    }
+  },
+  "speedFactor": 55.24,
+  "wholeRealTaskSpeedupProven": false,
+  "baselineVersion": "5.21.0",
+  "currentVersion": "5.22.0",
+  "baselineSourceCommit": "9e08b99088fea24eb3dd01b2f3cedd88c5d2e02c",
+  "engineSha256": "244097fff6bc8af427ace556fcd51ed8e3aad508fbff9e974e8790473e900d60",
+  "serialEngineSha256": "53e1ee5c389af2a35ea839773a976eaa8598ad4ed5b6a9014d4fafbbc1263e1d",
+  "limitations": [
+    "Single event-page comparison on local disk; not whole AI development speed.",
+    "Both variants use identical 100 event IDs/texts and current Store; model latency is not measured.",
+    "No extra paid model call. Model/depth and file/storage barriers unchanged."
+  ]
+}

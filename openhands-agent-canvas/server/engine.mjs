@@ -222,8 +222,16 @@ export class Engine extends SerialEngine {
  async pullDagEvents(id,node,config){
   const query=new URLSearchParams({limit:'100',sort_order:'TIMESTAMP'});if(node.cursor)query.set('page_id',node.cursor);else if(node.since)query.set('timestamp__gte',node.since);
   const page=await upstream(config,'/api/conversations/'+node.handle.conversationId+'/events/search?'+query);if(this.closed)return false;
-  for(const raw of page.items||[]){if(raw.timestamp&&(!node.since||raw.timestamp>node.since))node.since=raw.timestamp;const event=eventSummary(raw,config);if(!event)continue;this.store.addEvent(id,node.id,event);if(event.output&&event.text&&!node.output.includes(event.text))node.output=((node.output?node.output+'\n\n':'')+event.text).slice(-120000);if(event.fatal)node.fatal=event.text}
-  node.cursor=page.next_page_id||null;this.patchNode(id,node);return !!node.cursor;
+  const next={...node};
+  // Events and the cursor/output they produced form one durable checkpoint.
+  // Besides one fsync per page, this prevents a restart from losing output
+  // after saving its external event ID. No network call holds the transaction.
+  this.store.db.exec('BEGIN IMMEDIATE');
+  try{
+   for(const raw of page.items||[]){if(raw.timestamp&&(!next.since||raw.timestamp>next.since))next.since=raw.timestamp;const event=eventSummary(raw,config);if(!event)continue;this.store.addEvent(id,node.id,event);if(event.output&&event.text&&!next.output.includes(event.text))next.output=((next.output?next.output+'\n\n':'')+event.text).slice(-120000);if(event.fatal)next.fatal=event.text}
+   next.cursor=page.next_page_id||null;this.patchNode(id,next);this.store.db.exec('COMMIT');
+  }catch(error){this.store.db.exec('ROLLBACK');throw error}
+  Object.assign(node,next);return !!node.cursor;
  }
  saveInput(id,node){
   if(node.inputPersistenceVersion!==1||node.inputStored||!this.storage?.config().enabled)return Promise.resolve({ok:true});
