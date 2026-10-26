@@ -136,19 +136,30 @@ export class Storage {
   this.busy=true;const task=this.syncIndependent();this.syncTask=task;task.finally(()=>{if(this.syncTask===task)this.syncTask=null}).catch(()=>{});return task;
  }
  async syncIndependent(){
-  const batch={startedAt:new Date().toISOString(),finishedAt:null,concurrency:null,fulfilled:0,rejected:0,skipped:0,failures:[]};this.lastSyncBatch=batch;
+  const batch={startedAt:new Date().toISOString(),finishedAt:null,concurrency:null,total:0,active:0,pending:0,completed:0,fulfilled:0,rejected:0,skipped:0,failures:[]};this.lastSyncBatch=batch;
   try{
-   const active=this.store.db.prepare("SELECT COUNT(*) AS count FROM runs WHERE status IN ('queued','running','reconnecting','stopping')").get().count;
-   batch.concurrency=active?Math.min(4,this.syncConcurrency):this.syncConcurrency;
-   const collect=async(items,worker,kind)=>{const results=await settledPool(items,worker,{concurrency:batch.concurrency,signal:this.syncAbort.signal});for(const [index,r] of results.entries()){batch[r.status]++;if(r.status==='rejected'&&batch.failures.length<20)batch.failures.push({kind,id:typeof items[index]==='string'?items[index]:items[index]?.id||null})}};
-   const prefix=this.config().prefix;
-   await collect(this.store.projects().map(p=>p.id),async id=>{
-    const snapshot=this.store.project(id);if(!snapshot)return;const key='projects/'+id+'/latest.json';if(this.store.objectInfo(prefix+key)?.revision===snapshot.revision)return;
-    const body=JSON.stringify({schemaVersion:1,...snapshot},null,2),options={id,revision:snapshot.revision};await this.put('projects/'+id+'/versions/'+snapshot.revision+'.json',body,{...options,kind:'project-version'});await this.put(key,body,{...options,kind:'project'});
-   },'project');
-   if(!this.closed){const runs=this.store.db.prepare("SELECT id FROM runs ORDER BY CASE WHEN status IN ('queued','running','reconnecting','stopping') THEN 0 ELSE 1 END, created_at DESC").all();await collect(runs,async({id})=>{const run=this.store.run(id);if(run)await this.syncRun(run)},'run')}
-   if(!this.closed&&this.connectors)await collect([null],()=>this.connectors.sync(),'engine');
-   if(!this.closed){const last=this.store.setting('last-backup');if(!last||Date.now()-Date.parse(last.at)>86400000)await collect([null],()=>this.backup(),'backup')}
+   const activeStatuses=new Set(['queued','running','reconnecting','stopping']),runs=this.store.db.prepare("SELECT id,status FROM runs ORDER BY created_at DESC").all();
+   batch.concurrency=runs.some(r=>activeStatuses.has(r.status))?Math.min(4,this.syncConcurrency):this.syncConcurrency;
+   const prefix=this.config().prefix,runJob=({id})=>({kind:'run',id,work:async()=>{const run=this.store.run(id);if(run)await this.syncRun(run)}});
+   const jobs=runs.filter(r=>activeStatuses.has(r.status)).map(runJob);
+   if(this.connectors)jobs.push({kind:'engine',id:null,work:()=>this.connectors.sync()});
+   const last=this.store.setting('last-backup');if(!last||Date.now()-Date.parse(last.at)>86400000)jobs.push({kind:'backup',id:null,work:()=>this.backup()});
+   const projects=this.store.projects(),history=runs.filter(r=>!activeStatuses.has(r.status));
+   // There is no cross-root storage dependency. Interleave project and run roots
+   // rather than awaiting a whole category; each root keeps its own write order.
+   for(let i=0;i<Math.max(projects.length,history.length);i++){
+    if(projects[i]){const id=projects[i].id;jobs.push({kind:'project',id,work:async()=>{
+     const snapshot=this.store.project(id);if(!snapshot)return;const key='projects/'+id+'/latest.json';if(this.store.objectInfo(prefix+key)?.revision===snapshot.revision)return;
+     const body=JSON.stringify({schemaVersion:1,...snapshot},null,2),options={id,revision:snapshot.revision};await this.put('projects/'+id+'/versions/'+snapshot.revision+'.json',body,{...options,kind:'project-version'});await this.put(key,body,{...options,kind:'project'});
+    }})}
+    if(history[i])jobs.push(runJob(history[i]));
+   }
+   batch.total=batch.pending=jobs.length;
+   const results=await settledPool(jobs,job=>{batch.pending--;batch.active++;return job.work()},{concurrency:batch.concurrency,signal:this.syncAbort.signal,onSettled:(result,index)=>{
+    batch.active--;batch.completed++;batch[result.status]++;
+    if(result.status==='rejected'&&batch.failures.length<20)batch.failures.push({kind:jobs[index].kind,id:jobs[index].id});
+   }});
+   batch.skipped=results.filter(r=>r.status==='skipped').length;batch.pending=0;
    if(this.closed||batch.rejected||batch.skipped)throw new ApiError('同步未完成。',502);
    this.lastSync=new Date().toISOString();this.lastError=null;return {...this.status(),busy:false};
   }catch{this.lastError='同步未完成，服务器数据已保留；请检查存储配置后重试。';throw new ApiError(this.lastError,502)}finally{batch.finishedAt=new Date().toISOString();this.busy=false}

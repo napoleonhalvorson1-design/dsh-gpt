@@ -7,3 +7,12 @@
 storage_status 的 lastSyncBatch 包含 startedAt、finishedAt、concurrency、fulfilled、rejected、skipped 和最多 20 个失败根的 kind/id。根计数包括已无需上传的根，不是请求次数；不会返回原始 provider 错误或凭据。关闭时 skipped 是未派发任务，已启动任务仍等待真实结束。中止本进程网络等待不等于远端写入撤销；未知结果使用原对象键补传。
 
 只读查看不写桶，也不调用模型。不要为了看状态重跑 AI。阶段入桶屏障继续决定下游是否解锁；后台根失败不能被解释为整轮已同步或交付成功。局部同步夹具的加速不代表真实开发整体快 11 倍。
+
+
+## 统一队列与实时完成进度（5.18 / 插件 2.17）
+
+项目、运行、配置及到期备份共享一个有界队列，不再等待整个项目类别完成才同步运行。当前快照中的活动运行先占槽，其后配置和备份，项目与历史运行交错；每个根任务内部的版本→latest、日志块→索引和运行记录顺序保持。闲时最多 16，存在活动开发时最多 4；单项失败仍只记录安全的 kind/id，关闭停止新派发并等待已启动工作结束。
+
+canvas_storage_status 或 `canvas storage status` 的 lastSyncBatch 现在实时提供 total、active、pending、completed、fulfilled、rejected、skipped。finishedAt=null 且 busy=true 表示仍在同步，部分计数不能当作整批成功。慢项目等待期间其他任务的完成计数已可见。保留 lastError 和上次整批成功时间的语义；状态不包含失败原文、模型输出或凭据。
+
+真实增量开发 run engine-sync-pool-progress-20261027-r1 已从上轮三个文件继续修改并通过快照校验，约 235 秒，其中模型约 223 秒。签名 S3 本地延迟夹具中，活动运行记录在单项目额外等待 1200ms 时从约 1440ms 提前至 65ms，但整批仍约 1.6 秒；不能把这项 22 倍的记录可见延迟改善说成 AI 开发整体 11 倍。

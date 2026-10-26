@@ -125,3 +125,5 @@ strongest 新运行按工作台保留量选择同模型、同深度的已验证�
 ## 在已有成果上增量开发（5.17 / 插件 2.16）
 
 本项目的新需求可用 canvas_start_run 的 baseRunId 或 CLI --base-run，继承同项目上轮成功且已校验入桶的完整代码与测试，再实现改动；未完成任务仍使用 resume。先读 [增量开发](references/incremental-development.md)，不要重新生成已有项目。run.artifactSource 给出固定来源与新基线哈希，存储失败不重跑旧 AI。
+
+5.18 / 插件 2.17：后台同步的独立根共享统一队列，活动运行优先，lastSyncBatch 实时给出 total/active/pending/completed 与逐项结果计数；busy 且未 finished 不代表整批成功。见 [后台同步](references/storage-sync.md)。
