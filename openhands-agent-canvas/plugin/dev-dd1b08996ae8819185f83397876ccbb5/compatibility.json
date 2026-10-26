@@ -3,7 +3,7 @@
   "pluginId": "plugin_asdk_app_sites_dd1b08996ae8819185f83397876ccbb5",
   "appId": "asdk_app_sites_dd1b08996ae8819185f83397876ccbb5",
   "siteProjectId": "appgprj_6adedaf9d3488191965345dea18f91e3",
-  "minimumWebsiteVersion": "5.20.0",
+  "minimumWebsiteVersion": "5.21.0",
   "websiteOrigin": "https://canvas.43-173-109-57.sslip.io",
   "mcpEndpoint": "https://openhands-agent-canvas-q7m2.awakesugar5.chatgpt.site/mcp",
   "requiredTools": [

@@ -108,3 +108,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.19 / 插件 2.18：单次 start 可覆盖模式、深度和 taskComplexity（CLI --complexity）；快捷创建保留难度。planningComplexity/--planning-complexity 是 auto+strongest 负责人的初始难度提示，仅在用户未固定全程难度时生效，不限制负责人后续阶段升级；评估实际语义而非说明长度，不确定用 auto。单次参数不保存项目，续跑保持冻结设置，DeepSeek Flash/max 不变。见 docs/run-policy.md；真实任务证据在 docs/performance-policy-5.19.0.json，未证明整体 11 倍。
 
 5.20 / 插件 2.19：DeepSeek DSH v4 可用 runs trace 或 canvas_run_status view=trace/nodeId 做只读数字诊断；需受保护 profile.nativeTrace 的目录配置及原生 python3/zstd。验证本次回执、唯一原生会话与工作目录，只返回计数和时间；不传模型/思考/工具文本，不改运行状态。用量与工具区间均为已知下限，取消不算成功。最近同入口已验证模型的摘要可供最强负责人分工参考，重启后可重读。Flash/max 不变。见 docs/native-trace.md。
+
+5.21 / 插件 2.20：maxParallelNodes 只计本运行的准备/推理阶段，模型完成后保存快照的阶段不占推理名额；真正依赖继续等待已校验入桶的 outputReady。全局准备/推理仍最多 5，DAG 常驻调度最多 10、未结束阶段工作最多 10，保存积压会阻止新阶段继续派发。历史串行运行仍最多 3，与 DAG 共享全局执行名额。恢复查询不会让旧排队记录遮住已提交会话或另一类队列；activeNodeIds 仍包含正在保存的阶段。见 docs/scheduler-capacity.md，不把夹具吞吐当作真实模型整体 11 倍。

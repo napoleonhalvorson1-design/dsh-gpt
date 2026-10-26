@@ -1,0 +1,30 @@
+{
+  "scope": "Complete five-run development scheduler with actual native-file HTTP and signed-S3 fixtures; model responses controlled at 80ms, stage archive PUT delayed 300ms",
+  "samples": {
+    "before": {
+      "elapsedMs": 9214,
+      "modelCalls": 25,
+      "completedRuns": 5,
+      "observedPeakModels": 2
+    },
+    "after": {
+      "elapsedMs": 6309,
+      "modelCalls": 25,
+      "completedRuns": 5,
+      "observedPeakModels": 2
+    }
+  },
+  "speedFactor": 1.46,
+  "wholeRealTaskSpeedupProven": false,
+  "baselineVersion": "5.20.0",
+  "baselineSourceCommit": "52f082516bdc2e8dff84d1630421026405be2c43",
+  "currentVersion": "5.21.0",
+  "engineSha256": "1d954c5a7653baa000e1b789659749f0c87107e0d83d55e069bcded37f8b81a5",
+  "storeSha256": "b8efdc06e1e78e0e636fbb27bc29578a7d5aa8d4e15441b5d6bea5068ce2c04d",
+  "limitations": [
+    "Single controlled comparison, not a real model latency benchmark.",
+    "Both variants use the current fixture Store and exact same workload; the baseline Engine source is unchanged.",
+    "No change to model, reasoning depth, file validation or storage barriers.",
+    "No whole-project 11x claim."
+  ]
+}

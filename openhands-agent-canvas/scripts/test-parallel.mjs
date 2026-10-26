@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import {once} from 'node:events';
 import {gzipSync,gunzipSync} from 'node:zlib';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
 import {tmpdir} from 'node:os';
-import {join,basename} from 'node:path';
+import {join,basename,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {createControl} from '../server/http.mjs';
 
@@ -87,6 +88,7 @@ const fixture=http.createServer(async(req,res)=>{
     const match=key.match(/runs\/([^/]+)\/stages\/([^/]+)\/workspace\.tar\.gz$/);
     if(match){
      const plan=planFor(match[1]),nodeId=match[2];
+     if(plan.checkpointDelayMs)await sleep(plan.checkpointDelayMs);
      if(plan.checkpointGate?.nodeId===nodeId){plan.checkpointGate.entered=true;await plan.checkpointGate.promise}
      if(plan.failCheckpoint===nodeId){res.writeHead(403,{'Content-Type':'application/xml'});res.end('<Error><Code>AccessDenied</Code></Error>');return}
     }
@@ -117,7 +119,7 @@ const fixture=http.createServer(async(req,res)=>{
   }
   if(path==='/api/conversations'&&req.method==='POST'){
    const data=JSON.parse(body),ws=workspace(region,data.workspace.working_dir);assert(ws,'Conversation must use its own node workspace');
-   const plan=planFor(ws.runId),record={id:data.conversation_id,runId:ws.runId,nodeId:ws.nodeId,workspace:ws.path,region,system:data.agent_settings?.agent_context?.system_message_suffix||'',prompt:data.initial_message.content[0].text,inherited:new Map(ws.files),status:'running',interrupts:0,readsAfterPause:0};
+   const plan=planFor(ws.runId),record={id:data.conversation_id,runId:ws.runId,nodeId:ws.nodeId,workspace:ws.path,region,system:data.agent_settings?.agent_context?.system_message_suffix||'',prompt:data.initial_message.content[0].text,inherited:new Map(ws.files),status:'running',interrupts:0,readsAfterPause:0,readyAt:Date.now()+(plan.modelDelayMs||0)};
    record.fail=plan.failNodes?.has(ws.nodeId)||false;creates.push(record);conversations.set(record.id,record);stageFiles(ws.nodeId,ws.files,plan);
    if(plan.capacityGroup){const active=creates.filter(item=>item.status==='running'&&planFor(item.runId).capacityGroup===plan.capacityGroup).length;peaks.set(plan.capacityGroup,Math.max(peaks.get(plan.capacityGroup)||0,active))}
    json({id:record.id,execution_status:'running'},201);return;
@@ -132,7 +134,7 @@ const fixture=http.createServer(async(req,res)=>{
     const message=record.fail?'Warning\n'+JSON.stringify({type:'error',status:400,error:{code:'model_not_found',message:'Fixture provider failure'}}):record.nodeId+' completed';
     json({items:record.status==='finished'||plan.fatalWhileRunning?.has(record.nodeId)?[{id:record.id+'-output',kind:'ActionEvent',source:'agent',action:{kind:'FinishAction',message}}]:[],next_page_id:null});return;
    }
-   if(record.status==='running'&&!plan.hold?.has(record.nodeId))record.status='finished';
+   if(record.status==='running'&&!plan.hold?.has(record.nodeId)&&Date.now()>=record.readyAt)record.status='finished';
    if(record.status==='paused')record.readsAfterPause++;
    json({id:record.id,execution_status:record.status});return;
   }
@@ -256,6 +258,32 @@ try{
  const nextSlot={hold:new Set(['plan'])};start('storage-slot-next',nextSlot,singleFlow);await waitFor(()=>records('storage-slot-next','plan').length===1,'Another run uses the released inference slot');
  check(!app.store.run('storage-slot-free').nodes.plan.outputReady&&app.engine.nodeActive.size===1,'Storage waits release inference capacity while preserving output barriers');
  slotGate.release();nextSlot.hold.clear();await waitRun('storage-slot-free','succeeded');await waitRun('storage-slot-next','succeeded');app.engine.maxNodeActive=previousLimit;
+
+ // Inference limits count preparation/inference, never completed-model uploads.
+ const sameRunGate=gate('a'),sameRunPlan={checkpointGate:sameRunGate,hold:new Set(['b']),capacityGroup:'storage-per-run'};
+ start('storage-per-run',sameRunPlan,{...flow,maxParallelNodes:1});
+ await waitFor(()=>sameRunGate.entered&&records('storage-per-run','b').length===1,'Independent sibling starts while the previous sibling persists');
+ check(peaks.get('storage-per-run')===1&&!app.store.run('storage-per-run').nodes.a.outputReady,'Per-run inference limit stays one; bucket barrier remains closed');
+ check(records('storage-per-run','join').length===0,'A true dependent still waits for both output barriers');
+ sameRunGate.release();sameRunPlan.hold.clear();await waitRun('storage-per-run','succeeded');
+
+ const admissionIds=Array.from({length:5},(_,i)=>'dag-admission-'+i),admissionPlans=admissionIds.map(id=>{const p={hold:new Set(['plan']),capacityGroup:'admission'};start(id,p,singleFlow);return p});
+ await waitFor(()=>admissionIds.every(id=>records(id,'plan').length===1),'Five single-node DAG runs fill all global inference slots');
+ check(peaks.get('admission')===5,'The old three-workflow admission limit no longer leaves two inference slots idle');
+ for(const p of admissionPlans)p.hold.clear();await Promise.all(admissionIds.map(id=>waitRun(id,'succeeded')));
+
+ const oldStageLimit=app.engine.maxStageActive,oldNodeLimit=app.engine.maxNodeActive;app.engine.maxStageActive=2;app.engine.maxNodeActive=1;
+ const pressureGates=[gate('plan'),gate('plan')];
+ start('stage-pressure-a',{checkpointGate:pressureGates[0]},singleFlow);await waitFor(()=>pressureGates[0].entered,'First pending snapshot');
+ start('stage-pressure-b',{checkpointGate:pressureGates[1]},singleFlow);await waitFor(()=>pressureGates[1].entered,'Second pending snapshot');
+ const pressureNext={hold:new Set(['plan'])};start('stage-pressure-next',pressureNext,singleFlow);
+ await waitFor(()=>app.engine.active.has('stage-pressure-next'),'Backpressured DAG is resident');
+ await sleep(80);check(records('stage-pressure-next').length===0&&app.engine.stageActive.size===2&&app.engine.nodeActive.size===0,'Global stage backpressure bounds storage without claiming inference is busy');
+ pressureGates[0].release();await waitFor(()=>records('stage-pressure-next').length===1,'A released persistence slot dispatches the waiting node');
+ check(app.engine.stageActive.size<=2,'All outstanding stage work stays within the separate bound');
+ await request('/runs/stage-pressure-b/stop','POST',{});check((await state('stage-pressure-b')).status==='stopping','Cancellation stays pending while an already completed snapshot is persisting');
+ pressureGates[1].release();pressureNext.hold.clear();await waitRun('stage-pressure-a','succeeded');await waitRun('stage-pressure-b','cancelled');await waitRun('stage-pressure-next','succeeded');
+ app.engine.maxStageActive=oldStageLimit;app.engine.maxNodeActive=oldNodeLimit;
 
  const snapshotPlan={failSnapshot:'plan'};start('parallel-snapshot',snapshotPlan);
  const snapshotFailed=await waitRun('parallel-snapshot','failed');
@@ -391,6 +419,22 @@ try{
  const savedSetting=app.store.setting('s3');app.store.setSetting('s3',{...savedSetting,prefix:'different/'});await assert.rejects(()=>app.engine.runSource.get(app.store.run('incremental-retry')),/存储配置/);app.store.setSetting('s3',savedSetting);
  check(fixtureErrors.length===0,'All native and S3 protocol requests were valid');
  console.log(`Passed ${checks} parallel DAG, isolated workspace, common-ancestor merge, explicit conflict resolution, checkpoint barriers, binary handoff, branch/checkpoint retry, run/global concurrency limits, all-branch stop and controller restart checks.`);
+ // Optional full HTTP/SQLite/native-files/signed-S3 fixture comparison. The
+ // historical Engine is loaded unchanged; controlled model delays are not real AI.
+ if(process.env.CANVAS_SCHEDULER_BASELINE){
+  const {Engine:Before}=await import(pathToFileURL(join(resolve(process.env.CANVAS_SCHEDULER_BASELINE),'server/engine.mjs'))),current=Object.getPrototypeOf(app.engine),samples={};
+  const ids=['plan',...fourBranches],benchmarkFlow={...wideFlow,maxParallelNodes:1,nodes:wideFlow.nodes.filter(n=>n.id!=='join'),edges:[['start','plan'],...fourBranches.map(id=>['plan',id]),...fourBranches.map(id=>[id,'end'])]};
+  for(const [version,prototype] of [['before',Before.prototype],['after',current]]){
+   assert.equal(app.engine.active.size,0);Object.setPrototypeOf(app.engine,prototype);const started=performance.now(),runIds=Array.from({length:5},(_,i)=>'scheduler-bench-'+version+'-'+i);
+   for(const id of runIds)start(id,{modelDelayMs:80,checkpointDelayMs:300,capacityGroup:'bench-'+version},benchmarkFlow);
+   const runs=await Promise.all(runIds.map(id=>waitRun(id,'succeeded')));
+   const elapsedMs=Math.round(performance.now()-started);
+   for(const run of runs){assert.equal(records(run.id).length,5);for(const node of Object.values(run.nodes))assert(node.outputReady&&node.checkpoint?.sha256);const files=await request('/runs/'+run.id+'/files');for(const file of ['shared.txt','frontend/a.txt','backend/b.txt','branch-c.txt','branch-d.txt','assets/binary.bin'])assert(files.items.some(f=>f.path===file));}
+   samples[version]={elapsedMs,modelCalls:runs.length*ids.length,completedRuns:runs.length,observedPeakModels:peaks.get('bench-'+version)};
+  }
+  Object.setPrototypeOf(app.engine,current);const report={scope:'Complete five-run development scheduler with actual native-file HTTP and signed-S3 fixtures; model responses controlled at 80ms, stage archive PUT delayed 300ms',samples,speedFactor:Math.round(samples.before.elapsedMs/samples.after.elapsedMs*100)/100,wholeRealTaskSpeedupProven:false};
+  if(process.env.CANVAS_SCHEDULER_REPORT)await writeFile(process.env.CANVAS_SCHEDULER_REPORT,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
+ }
 }finally{
  for(const plan of plans.values())plan.checkpointGate?.release();
  await idle();await new Promise(resolve=>fixture.close(resolve));await rm(directory,{recursive:true,force:true});
