@@ -1,0 +1,81 @@
+{
+  "goal": "Increase capability and improve whole-task speed by 1000% (11x)",
+  "completeGoal": false,
+  "scope": "Real AI implementation of the same run-performance module requirements; includes actual native I/O and S3 barriers. No CI/PR time included.",
+  "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+  "current": {
+    "version": "5.10.0",
+    "runId": "engine-performance-live-20261027-r1",
+    "status": "succeeded",
+    "createdAt": "2026-10-26T18:12:19.255Z",
+    "finishedAt": "2026-10-26T18:19:05.192Z",
+    "metrics": {
+      "schemaVersion": 1,
+      "elapsedMs": 405937,
+      "nodes": [
+        {
+          "id": "plan",
+          "queueMs": 18,
+          "preparationMs": 285,
+          "submissionWaitMs": 10,
+          "modelMs": 215754,
+          "snapshotMs": 151,
+          "barrierMs": 187261,
+          "endToEndMs": 403461,
+          "endToEndEndField": "outputReadyAt",
+          "endToEndComplete": true,
+          "timingComplete": true
+        }
+      ],
+      "modelWallMs": 215754,
+      "modelWorkMs": 215754,
+      "observedPeakModels": 1,
+      "modelIntervalsComplete": true,
+      "overall": {
+        "modelRatio": 0.5314962666620683,
+        "overheadRatio": 0.46850373333793177,
+        "nonModelWallMs": 190183
+      },
+      "slowestNode": {
+        "id": "plan",
+        "endToEndMs": 403461,
+        "endField": "outputReadyAt",
+        "complete": true
+      },
+      "warnings": []
+    },
+    "nodes": [
+      {
+        "id": "plan",
+        "conversationId": "39f2280d-6165-4e1a-bbd0-850cd277a56a",
+        "profileId": "codex-silicon",
+        "modelUsed": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "selectionApplied": true,
+        "submittedAt": "2026-10-26T18:12:19.568Z",
+        "finishedAt": "2026-10-26T18:15:55.322Z",
+        "snapshotReadyAt": "2026-10-26T18:15:55.473Z",
+        "outputReadyAt": "2026-10-26T18:19:02.734Z"
+      }
+    ],
+    "acceptance": "Produced module, tests and documentation; task tests and shared independent artifact contract passed.",
+    "recovery": {
+      "storageFailure": true,
+      "assistantResumedAt": "2026-10-26T18:18:39.131Z",
+      "newInference": false,
+      "conversationPreserved": true
+    }
+  },
+  "baseline": {
+    "version": "5.6.0",
+    "runId": "engine-performance-baseline-20261027-r1",
+    "status": "running",
+    "reportPending": true
+  },
+  "limitations": [
+    "Single task, not a general speedup claim.",
+    "Current run includes a real storage failure and assisted storage retry; this delay is retained.",
+    "Automatic model selection is part of each engine version; record actual model/depth choices rather than asserting equal models.",
+    "5.11 upload fixes are covered by protocol tests; this 5.10 measurement does not prove their real-world speedup."
+  ]
+}

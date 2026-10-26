@@ -1,11 +1,11 @@
 {
   "name": "openhands-agent-canvas",
-  "version": "5.10.0",
+  "version": "5.11.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/test.mjs && node scripts/test-backend.mjs && node scripts/test-control.mjs && node scripts/test-integrations.mjs && node scripts/test-files.mjs && node scripts/test-profiles.mjs && node scripts/test-handoff.mjs && node scripts/test-profile-control.mjs && node scripts/test-storage-env.mjs && node scripts/test-bucket-workflow.mjs && node scripts/test-engine.mjs && node scripts/test-engine-hosts.mjs && node scripts/test-engine-agents.mjs && node scripts/test-development.mjs && node scripts/test-parallel.mjs && node scripts/test-collaboration.mjs && node scripts/test-performance.mjs && node scripts/test-model-policy.mjs && python3 scripts/test-acp-policy.py && node scripts/test-adaptive.mjs && node scripts/test-planner-policy.mjs && node scripts/test-agent-recovery.mjs && python3 scripts/test-bulk-handoff.py && node scripts/test-event-wakeup.mjs && node scripts/test-stage-policy.mjs && node scripts/test-github-gate.mjs && node scripts/test-github-delivery.mjs && node scripts/test-repository-source.mjs",
+    "test": "node scripts/test.mjs && node scripts/test-backend.mjs && node scripts/test-control.mjs && node scripts/test-integrations.mjs && node scripts/test-files.mjs && node scripts/test-profiles.mjs && node scripts/test-handoff.mjs && node scripts/test-profile-control.mjs && node scripts/test-storage-env.mjs && node scripts/test-bucket-workflow.mjs && node scripts/test-engine.mjs && node scripts/test-engine-hosts.mjs && node scripts/test-engine-agents.mjs && node scripts/test-development.mjs && node scripts/test-parallel.mjs && node scripts/test-collaboration.mjs && node scripts/test-performance.mjs && node scripts/test-model-policy.mjs && python3 scripts/test-acp-policy.py && node scripts/test-adaptive.mjs && node scripts/test-planner-policy.mjs && node scripts/test-agent-recovery.mjs && python3 scripts/test-bulk-handoff.py && node scripts/test-event-wakeup.mjs && node scripts/test-stage-policy.mjs && node scripts/test-github-gate.mjs && node scripts/test-github-delivery.mjs && node scripts/test-repository-source.mjs && node scripts/test-run-performance.mjs && node scripts/test-storage-upload.mjs",
     "dev": "node scripts/dev.mjs",
     "test:mobile": "node scripts/test-mobile.mjs",
     "plugin:pack": "node scripts/package-plugin.mjs",

@@ -7,6 +7,7 @@ import {createReadStream,createWriteStream} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+import {setTimeout as sleep} from 'node:timers/promises';
 import {ApiError} from '../shared/openhands.mjs';
 const clientIdentity=c=>createHash('sha256').update(JSON.stringify([c.endpoint,c.region,c.forcePathStyle,c.accessKeyId,c.secretAccessKey,c.sessionToken])).digest('hex');
 async function matchesCheckpoint(path,checkpoint){try{const info=await lstat(path);if(!info.isFile()||info.size!==checkpoint.size)return false;const hash=createHash('sha256');for await(const bytes of createReadStream(path))hash.update(bytes);return hash.digest('hex')===checkpoint.sha256}catch{return false}}
@@ -53,7 +54,17 @@ export class Storage {
  }
  async list({limit=100,prefix='',cursor=''}={}){const c=this.config();if(!c.bucket)throw new ApiError('请先配置 S3 桶名。',409);if(!Number.isInteger(Number(limit))||Number(limit)<1||Number(limit)>1000||typeof prefix!=='string'||prefix.length>1024||typeof cursor!=='string'||cursor.length>8192)throw new ApiError('列举参数无效。');const client=this.client({...c,enabled:true});try{const result=await client.send(new ListObjectsV2Command({Bucket:c.bucket,MaxKeys:Number(limit),...(prefix?{Prefix:prefix}:{}),...(cursor?{ContinuationToken:cursor}:{})}),{abortSignal:AbortSignal.timeout(30000)});return {ok:true,bucket:c.bucket,endpoint:c.endpoint,region:c.region,signatureVersion:'s3v4',items:(result.Contents||[]).map(o=>({key:o.Key,size:o.Size||0,lastModified:o.LastModified?.toISOString()||null})),hasMore:!!result.IsTruncated,nextCursor:result.NextContinuationToken||null,message:'只读列举成功，未上传、修改或删除文件。'}}catch(e){const code=['AccessDenied','InvalidAccessKeyId','SignatureDoesNotMatch','NoSuchBucket','AuthorizationHeaderMalformed','RequestTimeTooSkewed','ExpiredToken'].includes(e.name)?e.name:'S3ConnectionError';throw new ApiError('列出桶内文件失败（'+code+'），请检查密钥、Region、桶名及列举权限。',502)}finally{client.destroy()}}
  async test(){const c=this.config();if(c.readOnly)throw new ApiError('当前为只读连接，请使用列出桶内文件测试。',409);if(!c.bucket||!c.accessKeyId||!c.secretAccessKey)throw new ApiError('请先填写桶名和访问密钥。');const client=this.client({...c,enabled:true}),key=c.prefix+'_connection-tests/'+randomUUID()+'.txt',value='OpenHands Canvas storage check '+randomUUID();let uploaded=false;try{await client.send(new PutObjectCommand({Bucket:c.bucket,Key:key,Body:value,ContentType:'text/plain'}));uploaded=true;const r=await client.send(new GetObjectCommand({Bucket:c.bucket,Key:key}));if(await r.Body.transformToString()!==value)throw Error('mismatch');await client.send(new DeleteObjectCommand({Bucket:c.bucket,Key:key}));uploaded=false;return {ok:true,message:'私有桶写入、读取、删除测试通过。'}}catch(e){throw new ApiError('对象存储验证失败，请检查 Endpoint、桶名和读写删除权限。',502)}finally{if(uploaded)await client.send(new DeleteObjectCommand({Bucket:c.bucket,Key:key})).catch(()=>{});client.destroy()}}
- async put(key,body,{kind,id,revision=1,size,contentType='application/json'}){const c=this.config(),client=this.client(c);try{await client.send(new PutObjectCommand({Bucket:c.bucket,Key:c.prefix+key,Body:body,ContentType:contentType,...(size!==undefined?{ContentLength:size}:{})}));this.store.object(c.prefix+key,kind,id,revision,size??Buffer.byteLength(body))}finally{client.destroy()}}
+ async put(key,body,{kind,id,revision=1,size,contentType='application/json',timeoutMs=90000}){const c=this.config(),client=this.client(c);try{await client.send(new PutObjectCommand({Bucket:c.bucket,Key:c.prefix+key,Body:body,ContentType:contentType,...(size!==undefined?{ContentLength:size}:{})}),{abortSignal:AbortSignal.timeout(timeoutMs)});this.store.object(c.prefix+key,kind,id,revision,size??Buffer.byteLength(body))}finally{client.destroy()}}
+ async putFile(key,path,options){
+  // SDK retries cannot replay a consumed file stream. Reopen the immutable
+  // snapshot for one bounded retry; denied/invalid requests fail immediately.
+  for(let attempt=0;;attempt++){
+   const body=createReadStream(path);
+   try{return await this.put(key,body,{...options,timeoutMs:180000})}
+   catch(error){const status=error.$metadata?.httpStatusCode,retryable=status===429||status>=500||['TimeoutError','RequestTimeout','RequestTimeoutError','AbortError','NetworkingError','ECONNRESET','ETIMEDOUT','EPIPE'].includes(error.name)||['ECONNRESET','ETIMEDOUT','EPIPE'].includes(error.code);if(attempt||!retryable||this.closed)throw error;await sleep(200)}
+   finally{body.destroy()}
+  }
+ }
  async json(key,value,options){return this.put(key,JSON.stringify(value,null,2),options)}
  async checkpoint(run,node,config,{historical=false,archivePath}={}){
   if(!this.config().enabled||node.status!=='succeeded'||config.mode!=='remote')return null;
@@ -64,7 +75,14 @@ export class Storage {
   const c=this.config(),relative='runs/'+run.id+'/stages/'+node.id+'/workspace.tar.gz',key=c.prefix+relative,manifestKey=c.prefix+'runs/'+run.id+'/stages/'+node.id+'/manifest.json',setting='checkpoint:'+run.id+':'+node.id,existing=this.store.setting(setting);
   if(existing?.key===key&&existing.conversationId===node.conversationId&&existing.bucket===c.bucket&&existing.endpoint===c.endpoint&&this.store.objectInfo(key)&&this.store.objectInfo(manifestKey))return existing;
   const directory=join(this.directory,'checkpoints',run.id);await mkdir(directory,{recursive:true,mode:0o700});const path=join(directory,node.id+'.tar.gz');if(archivePath){if(archivePath!==path)await copyFile(archivePath,path)}else await snapshotWorkspace(config,node.workspace||run.workspace,path);const size=(await stat(path)).size,hash=createHash('sha256');for await(const bytes of createReadStream(path))hash.update(bytes);const sha256=hash.digest('hex'),checkpoint={key,bucket:c.bucket,endpoint:c.endpoint,runId:run.id,nodeId:node.id,conversationId:node.conversationId,sha256,size,capturedAt:new Date().toISOString(),historical};
-  const saved=await Promise.allSettled([this.put(relative,createReadStream(path),{kind:'stage-artifact',id:run.id,size,contentType:'application/gzip'}),this.json('runs/'+run.id+'/stages/'+node.id+'/manifest.json',{schemaVersion:1,...checkpoint,name:node.name,profileId:node.profileId,server:node.server,model:node.modelUsed,finishedAt:node.finishedAt,output:node.output},{kind:'stage-manifest',id:run.id})]);const failed=saved.find(r=>r.status==='rejected');if(failed)throw failed.reason;this.store.setSetting(setting,checkpoint);return checkpoint;
+  const partsKey=setting+':parts',identity=JSON.stringify([key,c.bucket,c.endpoint,node.conversationId,sha256]),previous=this.store.setting(partsKey);
+  const parts=previous?.identity===identity?previous:{identity,capturedAt:checkpoint.capturedAt,done:{}};checkpoint.capturedAt=parts.capturedAt;
+  const manifest=JSON.stringify({schemaVersion:1,...checkpoint,name:node.name,profileId:node.profileId,server:node.server,model:node.modelUsed,finishedAt:node.finishedAt,output:node.output},null,2),manifestSha=createHash('sha256').update(manifest).digest('hex');
+  const savePart=async(name,objectKey,fingerprint,upload)=>{const receipt=parts.done[name];if(receipt?.key===objectKey&&receipt.sha256===fingerprint&&this.store.objectInfo(objectKey))return;await upload();parts.done[name]={key:objectKey,sha256:fingerprint};this.store.setSetting(partsKey,parts)};
+  const saved=await Promise.allSettled([
+   savePart('archive',key,sha256,()=>this.putFile(relative,path,{kind:'stage-artifact',id:run.id,size,contentType:'application/gzip'})),
+   savePart('manifest',manifestKey,manifestSha,()=>this.put('runs/'+run.id+'/stages/'+node.id+'/manifest.json',manifest,{kind:'stage-manifest',id:run.id}))
+  ]);const failed=saved.find(r=>r.status==='rejected');if(failed)throw failed.reason;this.store.setSetting(setting,checkpoint);return checkpoint;
  }
  async restoreCheckpoint(checkpoint,{reuseVerified=false}={}){
   const c=this.config();if(checkpoint.bucket!==c.bucket||checkpoint.endpoint!==c.endpoint||!checkpoint.key.startsWith(c.prefix)||!this.store.objectInfo(checkpoint.key)||!/^\w[\w-]{0,99}$/.test(checkpoint.runId)||!/^\w[\w-]{0,99}$/.test(checkpoint.nodeId))throw new ApiError('阶段文件所属存储配置已变化，请恢复原配置后继续。',409);
@@ -94,11 +112,11 @@ export class Storage {
   }
   const latest=this.store.run(run.id);if(known('state.json')?.revision!==latest.revision)await this.json(root+'state.json',{schemaVersion:1,...latest},{kind:'run-state',id:run.id,revision:latest.revision});
   if(run.status==='succeeded'){
-   const key=root+'artifacts.tar.gz';if(!this.store.objectInfo(prefix+key)){const a=await archiveRun(this.store,run.id,this.directory);await this.put(key,createReadStream(a.path),{kind:'artifact',id:run.id,size:a.size,contentType:'application/gzip'})}
+   const key=root+'artifacts.tar.gz';if(!this.store.objectInfo(prefix+key)){const a=await archiveRun(this.store,run.id,this.directory);await this.putFile(key,a.path,{kind:'artifact',id:run.id,size:a.size,contentType:'application/gzip'})}
    if(!known('manifest.json'))await this.json(root+'manifest.json',{schemaVersion:1,id:run.id,projectId:run.projectId,title:run.title,status:run.status,createdAt:run.createdAt,finishedAt:run.finishedAt,files:key},{kind:'manifest',id:run.id});
   }
  }
- async backup(){const c=this.config();this.client(c).destroy();const id=new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID().slice(0,8),path=join(this.directory,'backups',id+'.sqlite');await mkdir(dirname(path),{recursive:true,mode:0o700});await backup(this.store.db,path);const size=(await stat(path)).size;await this.put('backups/'+id+'.sqlite',createReadStream(path),{kind:'backup',id,size,contentType:'application/vnd.sqlite3'});this.store.setSetting('last-backup',{at:new Date().toISOString(),id});return {ok:true,id,size,key:c.prefix+'backups/'+id+'.sqlite'}}
+ async backup(){const c=this.config();this.client(c).destroy();const id=new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID().slice(0,8),path=join(this.directory,'backups',id+'.sqlite');await mkdir(dirname(path),{recursive:true,mode:0o700});await backup(this.store.db,path);const size=(await stat(path)).size;await this.putFile('backups/'+id+'.sqlite',path,{kind:'backup',id,size,contentType:'application/vnd.sqlite3'});this.store.setSetting('last-backup',{at:new Date().toISOString(),id});return {ok:true,id,size,key:c.prefix+'backups/'+id+'.sqlite'}}
  async sync(){if(this.busy)return {busy:true};if(!this.config().enabled)return {enabled:false};this.busy=true;try{
   const prefix=this.config().prefix;
   for(const p of this.store.projects()){const key='projects/'+p.id+'/latest.json';if(this.store.objectInfo(prefix+key)?.revision===p.revision)continue;const snapshot=this.store.project(p.id),body=JSON.stringify({schemaVersion:1,...snapshot},null,2);await this.put('projects/'+p.id+'/versions/'+p.revision+'.json',body,{kind:'project-version',id:p.id,revision:p.revision});await this.put(key,body,{kind:'project',id:p.id,revision:p.revision})}
