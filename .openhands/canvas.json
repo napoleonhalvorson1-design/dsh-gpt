@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "workbench": "https://canvas.43-173-109-57.sslip.io",
+  "repository": "napoleonhalvorson1-design/dsh-gpt",
+  "preset": "five-ai",
+  "collaborationMode": "adaptive",
+  "plannerPolicy": "strongest",
+  "coordinationPolicy": "lean",
+  "notes": "AI decides responsibilities and dependencies from requirements. Configure server credentials in the password-protected workbench; never commit tokens."
+}
