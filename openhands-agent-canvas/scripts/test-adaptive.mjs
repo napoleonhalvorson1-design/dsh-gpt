@@ -17,3 +17,6 @@ assert(legacyPrompt.includes('"manualProfiles":')&&legacyPrompt.includes('["lega
 assert(!autoPrompt.includes('"manualProfiles":')&&!autoPrompt.includes('["legacy","acp:codex"]'));
 assert(!legacyPrompt.includes('private-legacy-key'));
 console.log('Manual/legacy entry defaults remain addressable without advertising unverified automatic model choices.');
+
+for(const value of [null,0,-1,1.5,7201,"30",Infinity])assert.throws(()=>compileAdaptivePlan({...plan,stages:[{...stage("work","build"),estimatedSeconds:value}]},lean,bundle),/预计耗时/);
+for(const value of [1,7200])assert.equal(compileAdaptivePlan({...plan,stages:[{...stage("work","build"),estimatedSeconds:value}]},lean,bundle).stages[0].estimatedSeconds,value);

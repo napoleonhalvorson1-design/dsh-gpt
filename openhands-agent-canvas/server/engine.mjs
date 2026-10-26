@@ -14,6 +14,7 @@ import {recoverBudget} from './budget-recovery.mjs';
 import {pinRunSource} from './run-source.mjs';
 import {placePlanner} from './planner-placement.mjs';
 import {preparePlanRepair} from './plan-repair.mjs';
+import {freezeSchedule,stageOrder} from './critical-path.mjs';
 import {validateAdaptiveSeed,planningInstructions,compileAdaptivePlan,compactHandoffs,validateDirectDelivery} from './adaptive.mjs';
 export {ACTIVE,validateWorkflow};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -50,7 +51,7 @@ export class Engine extends SerialEngine {
   this.suppressTick=true;let run,transaction=false;const atomic=!!artifactSource;
   try{if(atomic){this.store.db.exec('BEGIN IMMEDIATE');transaction=true}run=super.enqueue({...input,workflow:flow},config);
   if(artifactSource){run.artifactSource=artifactSource;this.store.saveRun(run)}
-  if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive'){run.adaptivePlan={status:'pending',plannerId:'plan'};if(config.nodeConfigs?.plan?.selection?.planner&&config.nodeConfigs.plan.selection.verified)run.planRepairVersion=1;}run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
+  if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive'){run.adaptivePlan={status:'pending',plannerId:'plan'};run.schedulingVersion=1;if(config.nodeConfigs?.plan?.selection?.planner&&config.nodeConfigs.plan.selection.verified)run.planRepairVersion=1;}run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
   if(transaction){this.store.db.exec('COMMIT');transaction=false}}catch(error){if(transaction)this.store.db.exec('ROLLBACK');throw error}finally{this.suppressTick=false}
   this.tick();return this.store.run(run.id);
  }
@@ -107,7 +108,7 @@ export class Engine extends SerialEngine {
     if(!tasks.size){this.patch(id,r=>{r.status='cancelled';r.error=null;r.activeNodeIds=[];r.finishedAt=new Date().toISOString()});this.log(id,'workflow','所有已启动分支均已确认停止，成功阶段已保留。');return}
    }else{
     if(run.adaptivePlan?.status==='pending'&&this.ready(run.nodes.plan)){await this.expandPlan(id);run=this.store.run(id)}
-    for(const nodeId of run.order){
+    for(const nodeId of stageOrder(run)){
      run=this.store.run(id);const node=run.nodes[nodeId];if(run.cancelRequested)break;
      if(tasks.has(nodeId)||this.ready(node)||node.budgetRecovery?.state!=='stopping'&&(['failed','paused'].includes(node.status)||node.error))continue;
      const inferenceTasks=[...tasks.keys()].filter(id=>!run.nodes[id].modelCompleted).length;
@@ -147,6 +148,7 @@ export class Engine extends SerialEngine {
   catch(error){if(this.closed)return;if(error.status===400){const repair=await preparePlanRepair(this,id,error,archive);if(repair)return;this.patchNode(id,{id:'plan',status:'failed',outputReady:false,modelCompleted:false,planningRejected:true,error:error.message});}throw error}
   if(this.closed)return;run=this.store.run(id);if(run.cancelRequested||run.adaptivePlan?.status!=='pending')return;
   const deps=dependencies(compiled.workflow);for(const definition of compiled.workflow.nodes.filter(n=>isAgent(n)&&n.id!=='plan')){const c=compiled.nodeConfigs[definition.id],selection=c.selection;run.nodes[definition.id]={id:definition.id,name:definition.name,phase:definition.phase,status:'pending',conversationId:randomUUID(),handle:null,output:'',cursor:null,since:null,fatal:null,profileId:c.profileId,profileLabel:c.profileLabel,server:c.server,workspace:c.workspace.replace(/\/$/,'')+'/runs/'+id+'/'+definition.id,modelUsed:selection?.model||c.acpModel||c.model,modelSelection:selection||null,modelRequested:selection?.model,reasoningEffort:selection?.effort,...(c.runtimeContext?{runtimeContextRequested:c.runtimeContext}:{}),dependencies:deps[definition.id],inputReady:false,outputReady:false}}
+  if(run.schedulingVersion===1)run.scheduling=freezeSchedule(compiled.stages,compiled.nodeConfigs,executionHistory(this.store,bundle.teamProfiles));
   run.workflow=compiled.workflow;run.order=compiled.workflow.nodes.filter(isAgent).map(n=>n.id);run.maxParallelNodes=compiled.workflow.maxParallelNodes;run.adaptivePlan={status:'applied',plannerId:'plan',sha256:createHash('sha256').update(JSON.stringify(plan)).digest('hex'),appliedAt:new Date().toISOString(),...compiled.summary};
   this.store.db.exec('BEGIN IMMEDIATE');try{this.store.setConfig(id,{...bundle,nodeConfigs:compiled.nodeConfigs});this.store.saveRun(run);this.store.db.exec('COMMIT')}catch(error){this.store.db.exec('ROLLBACK');throw error}
   this.log(id,'workflow',compiled.summary.directDelivery?'规划 AI 已直接完成需求，成果文件通过快照校验，无需另开实现调用。':'AI 已按需求决定 '+compiled.stages.length+' 个协作阶段；以实际实现为主，仅保留必要检查。分工依据：'+plan.decisions,{success:true});
