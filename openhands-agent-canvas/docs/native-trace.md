@@ -1,4 +1,4 @@
-# DeepSeek 原生数字诊断（5.20 / 插件 2.19）
+# DeepSeek 原生数字诊断（5.20 / 插件 2.19.1）
 
 任务长时间没有完成时，使用 `canvas runs trace --id RUN --node NODE`；MCP 对应 `canvas_run_status({id,view:"trace",nodeId})`。新 schema 未刷新时用 CLI。只读取现有记录，不启动模型、不创建项目、不修改运行状态或账号设置。当前仅支持配置了 nativeTrace 的 DSH v4 DeepSeek 入口；Codex、Claude 和没有日志的旧运行返回 unavailable。
 
@@ -12,4 +12,4 @@ activeStepMs 是仍打开步骤的已观测时长；turnEnded 只表示原生记
 
 部署侧为 DeepSeek profile 配置 `nativeTrace:{version:1,root:"原生DSH的sessions绝对目录"}`，并确认其服务器有 python3/zstd；此字段不进入模型提示词。当前上海已按实际目录验证，不修改全局 DSH profile 或审批配置。读取上限 16 MiB、最多 50 个候选会话；不直接返回原生错误文本。
 
-历史实证：engine-performance-fastplan-20261027-r1 的 implement 仍为 cancelled。13 步中 12 条完整消息累计已知 outputTokens=116801，最大单步72000；最大工具前等待448431ms，匹配工具区间共557ms。最后一条消息没有完整 usage。因此主要等待在模型请求/生成段，不能把它误判为工具慢；这不是成功开发样本或整体 11 倍提速证明。
+历史实证：engine-performance-fastplan-20261027-r1 的 implement 仍为 cancelled。13 步中 12 条完整消息累计已知 outputTokens=116801，最大单步72000；最大工具前等待448431ms，匹配工具区间共624ms。最后一条消息没有完整 usage。因此主要等待在模型请求/生成段，不能把它误判为工具慢；这不是成功开发样本或整体 11 倍提速证明。
