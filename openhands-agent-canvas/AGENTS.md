@@ -102,3 +102,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.16 / 插件 2.15：新 strongest 规划按工作台保留量分散到同引擎、同模型、同深度的已验证入口；manual 不改，平局保留原入口，不降级，显式备用与上下文约束继续有效。迁移不缩短原已学习预算。modelSelection.placement 仅是派发选择，不是实际模型回执。既有请求和已开始阶段不改派，续跑回到原规划入口，使用当前同入口凭据和冻结策略路径；地址变化仍拒绝。只读预览不建立保留。执行分支仅完成本次隔离职责，协作交给 plan.json；工作台操作者才使用接入/运行管理流程。见 docs/planner-placement.md。
 
 5.17 / 插件 2.16：新运行可指定 baseRunId（CLI --base-run）在同项目已成功且入桶的成果上继续开发，保留代码、测试、二进制、执行位及删除语义，不重跑原 AI。来源固定为校验快照，新基线也须入桶后才启动新推理；存储失败/重启只补存储。baseRunId 优先于仓库导入，repository 仍用于 GitHub 交付。未完成任务使用 resume。说明见 docs/incremental-development.md；协议测试不代表整体已达 11 倍。
+
+5.18 / 插件 2.17：Storage.sync 的独立项目/运行/配置/到期备份共享一个有界队列，活动运行先拿槽，不再有整类等待。lastSyncBatch 实时提供 total/active/pending/completed 与逐项完成结果；版本/latest、日志块/index 等根内顺序及关闭排空保留。settledPool 新增可等待 onSettled，通知失败停止新派发并排空后以原错误拒绝，不重试 worker。实测证据见 docs/performance-sync-5.18.0.json，未证明整体 11 倍。

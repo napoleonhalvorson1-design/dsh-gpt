@@ -311,3 +311,5 @@ ACP 策略会将标准 prompt-result usage 的数字字段写入 runtime-usage.j
 新的 strongest 规划在同模型、同深度的已验证入口间选择保留任务较少的一台。手动设置、上下文、备用约束和已学习预算保留，已开始的会话继续原路由。模型预览只读，续跑使用原入口及冻结策略。执行分支提示和技能适用范围也区分了本地开发与工作台管理。行为和测量边界见 [规划入口](docs/planner-placement.md)；本轮协议测试不调用真实模型，整体 11 倍目标尚未证实。
 
 5.17 / 插件 2.16：新运行可指定 baseRunId（CLI --base-run）在同项目已成功且入桶的成果上继续开发，保留代码、测试、二进制、执行位及删除语义，不重跑原 AI。来源固定为校验快照，新基线也须入桶后才启动新推理；存储失败/重启只补存储。baseRunId 优先于仓库导入，repository 仍用于 GitHub 交付。未完成任务使用 resume。说明见 docs/incremental-development.md；协议测试不代表整体已达 11 倍。
+
+5.18 / 插件 2.17：Storage.sync 的独立项目/运行/配置/到期备份共享一个有界队列，活动运行先拿槽，不再有整类等待。lastSyncBatch 实时提供 total/active/pending/completed 与逐项完成结果；版本/latest、日志块/index 等根内顺序及关闭排空保留。settledPool 新增可等待 onSettled，通知失败停止新派发并排空后以原错误拒绝，不重试 worker。实测证据见 docs/performance-sync-5.18.0.json，未证明整体 11 倍。

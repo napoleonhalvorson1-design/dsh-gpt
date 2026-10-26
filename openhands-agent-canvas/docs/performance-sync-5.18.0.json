@@ -1,0 +1,144 @@
+{
+  "completeGoal": false,
+  "goalSpeedFactor": 11,
+  "actualDevelopment": {
+    "version": "5.17.0",
+    "id": "engine-sync-pool-progress-20261027-r1",
+    "taskSha256": "80d44acec9f8b6243fda34bb68237b3afd7a1a1fa5e64475fb32208b5a7958d9",
+    "status": "succeeded",
+    "sourceRunId": "engine-sync-pool-20261027-r1",
+    "sourceArchiveSha256": "28a4e963de3b50488bf6357f6ddd57dc3a6b080edc26838fa1574e4eadfb0402",
+    "sourceFiles": 3,
+    "createdAt": "2026-10-26T21:07:29.546Z",
+    "finishedAt": "2026-10-26T21:11:24.821Z",
+    "adaptivePlan": {
+      "status": "applied",
+      "plannerId": "plan",
+      "sha256": "fd9143ece0d7f9fcbdf8ed16b54cf2b30a7ac9e40347f282abc39f394870e853",
+      "appliedAt": "2026-10-26T21:11:24.812Z",
+      "directDelivery": true,
+      "deliverables": [
+        "shared/settled-pool.mjs",
+        "scripts/test-settled-pool.mjs",
+        "docs/settled-pool.md"
+      ],
+      "goal": "为 settledPool 增加可等待的 onSettled 进度通知，供后续 Storage.sync 集成使用。",
+      "decisions": "单节点已直接完成三份文件的增量开发，保留全部旧测试；指定测试仅运行一次并全部通过。",
+      "acceptanceCriteria": [
+        "每个真正结束的已启动 worker 按完成顺序通知一次，传入实际结果对象及原索引；通知占用原并发槽，skipped 不通知。",
+        "通知失败立即停止派发并排空全部已启动工作及通知，最终以首次观察到的通知错误拒绝；保留取消与无回调时的既有行为。",
+        "保留旧测试并增加 deferred promises 测试与简短文档；node scripts/test-settled-pool.mjs 一次通过。"
+      ],
+      "coordinationPolicy": "lean",
+      "reviewStages": 0,
+      "maxParallelNodes": 1
+    },
+    "performance": {
+      "schemaVersion": 1,
+      "elapsedMs": 235275,
+      "nodes": [
+        {
+          "id": "plan",
+          "queueMs": 7,
+          "preparationMs": 6881,
+          "submissionWaitMs": 15,
+          "modelMs": 222614,
+          "snapshotMs": 137,
+          "barrierMs": 4207,
+          "endToEndMs": 233854,
+          "endToEndEndField": "outputReadyAt",
+          "endToEndComplete": true,
+          "timingComplete": true
+        }
+      ],
+      "modelWallMs": 222614,
+      "modelWorkMs": 222614,
+      "observedPeakModels": 1,
+      "modelIntervalsComplete": true,
+      "overall": {
+        "modelRatio": 0.9461863776431835,
+        "overheadRatio": 0.05381362235681649,
+        "nonModelWallMs": 12661
+      },
+      "slowestNode": {
+        "id": "plan",
+        "endToEndMs": 233854,
+        "endField": "outputReadyAt",
+        "complete": true
+      },
+      "warnings": []
+    },
+    "modelUsage": {
+      "schemaVersion": 1,
+      "requestId": "21f9371b-a1dd-402f-b4fc-96a6569aa492",
+      "model": "gpt-6-astra",
+      "effort": "xhigh",
+      "scope": "acp-prompts-including-tools",
+      "elapsedMs": 220044,
+      "completedPrompts": 1,
+      "stopReason": "end_turn",
+      "tokens": {
+        "totalTokens": 194516,
+        "inputTokens": 25900,
+        "cachedReadTokens": 159744,
+        "cachedWriteTokens": 0,
+        "outputTokens": 8872,
+        "thoughtTokens": 3146
+      }
+    },
+    "checkpoint": {
+      "key": "openhands-canvas/runs/engine-sync-pool-progress-20261027-r1/stages/plan/workspace.tar.gz",
+      "bucket": "zzx123-u1aya4fk",
+      "endpoint": "https://s3.7caiyun.com",
+      "runId": "engine-sync-pool-progress-20261027-r1",
+      "nodeId": "plan",
+      "conversationId": "21f9371b-a1dd-402f-b4fc-96a6569aa492",
+      "sha256": "c9ada33dcacde469cb21d95c36c1aba417a1db003433359bf8a8fbf78af27a6c",
+      "size": 6701,
+      "capturedAt": "2026-10-26T21:11:19.206Z",
+      "historical": false
+    },
+    "acceptance": "Downloaded final archive SHA matches completed stage checkpoint; imported the three specified files, original tests retained, task tests and signed-S3 integration tests passed."
+  },
+  "components": [
+    {
+      "scope": "Full Storage.sync with equal signed-S3 HTTP fixture workloads at 60ms/request; no models",
+      "samples": {
+        "serial-before": {
+          "elapsedMs": 1138,
+          "requests": 192,
+          "peak": 16
+        },
+        "parallel-after": {
+          "elapsedMs": 1073,
+          "requests": 192,
+          "peak": 16
+        }
+      },
+      "speedFactor": 1.06,
+      "wholeTaskSpeedupProven": false
+    },
+    {
+      "scope": "Time to persist the active run during full Storage.sync, same signed-S3 fixture with 20ms/request and one project delayed 1200ms; no models",
+      "samples": {
+        "phased-before": {
+          "elapsedMs": 1599,
+          "activeRunSavedMs": 1440
+        },
+        "unified-after": {
+          "elapsedMs": 1596,
+          "activeRunSavedMs": 65
+        }
+      },
+      "activeRunReadinessFactor": 22.15,
+      "wholeTaskSpeedupProven": false
+    }
+  ],
+  "limitations": [
+    "The real incremental task differs from the previous settledPool implementation; no whole-task speed comparison is claimed.",
+    "The focused native request preserved verified Astra/xhigh; usage counts are observed totals, not causal proof of a context-mode speed benefit.",
+    "Readiness fixture has one intentionally delayed project; it measures active-run persistence latency, not model development speed.",
+    "Equal full sync fixture improved only slightly; the delayed-project whole-batch duration stayed essentially unchanged.",
+    "Real development spent about 94.6% of elapsed time in model execution. No result proves 11x whole-development speed."
+  ]
+}
