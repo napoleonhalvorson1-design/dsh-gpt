@@ -74,8 +74,8 @@ export class Storage {
   }));const failed=saved.find(r=>r.status==='rejected');if(failed)throw failed.reason;
  }
  async persistInput(id,node){
-  const c=this.config(),root='runs/'+id+'/inputs/'+node.id+(node.fallbackCount?'/attempt-'+(node.fallbackCount+1):'')+'/',size=(await stat(node.inputArchive)).size,hash=createHash('sha256');for await(const bytes of createReadStream(node.inputArchive))hash.update(bytes);
-  const sha=hash.digest('hex'),manifest=JSON.stringify(node.mergeReport,null,2),manifestSha=createHash('sha256').update(manifest).digest('hex'),setting='input-parts:'+id+':'+node.id+':'+(node.fallbackCount||0),identity=JSON.stringify([c.endpoint,c.bucket,c.prefix,node.conversationId,sha,manifestSha]),previous=this.store.setting(setting),parts=previous?.identity===identity?previous:{identity,done:{}};
+  const generation=node.planRepair?.generation||0,c=this.config(),root='runs/'+id+'/inputs/'+node.id+(generation?'/repair-'+generation:'')+(node.fallbackCount?'/attempt-'+(node.fallbackCount+1):'')+'/',size=(await stat(node.inputArchive)).size,hash=createHash('sha256');for await(const bytes of createReadStream(node.inputArchive))hash.update(bytes);
+  const sha=hash.digest('hex'),manifest=JSON.stringify(node.mergeReport,null,2),manifestSha=createHash('sha256').update(manifest).digest('hex'),setting='input-parts:'+id+':'+node.id+':'+(node.fallbackCount||0)+(generation?':repair-'+generation:''),identity=JSON.stringify([c.endpoint,c.bucket,c.prefix,node.conversationId,sha,manifestSha]),previous=this.store.setting(setting),parts=previous?.identity===identity?previous:{identity,done:{}};
   await this.uploadParts(setting,parts,[
    {name:'archive',key:c.prefix+root+'workspace.tar.gz',sha256:sha,upload:()=>this.putFile(root+'workspace.tar.gz',node.inputArchive,{kind:'stage-input',id,size,contentType:'application/gzip'})},
    {name:'manifest',key:c.prefix+root+'handoff.json',sha256:manifestSha,upload:()=>this.put(root+'handoff.json',manifest,{kind:'handoff',id})}
@@ -87,15 +87,15 @@ export class Storage {
   const task=this.captureCheckpoint(run,node,config,{historical,archivePath});this.checkpointTasks.set(id,task);try{return await task}catch{throw new ApiError('阶段文件尚未保存到对象存储，请检查连接后继续；已完成的 AI 不会重复执行。',502)}finally{this.checkpointTasks.delete(id)}
  }
  async captureCheckpoint(run,node,config,{historical,archivePath}){
-  const c=this.config(),relative='runs/'+run.id+'/stages/'+node.id+'/workspace.tar.gz',key=c.prefix+relative,manifestKey=c.prefix+'runs/'+run.id+'/stages/'+node.id+'/manifest.json',setting='checkpoint:'+run.id+':'+node.id,existing=this.store.setting(setting);
+  const generation=node.planRepair?.generation||0,c=this.config(),root='runs/'+run.id+'/stages/'+node.id+(generation?'/repair-'+generation:'')+'/',relative=root+'workspace.tar.gz',key=c.prefix+relative,manifestKey=c.prefix+root+'manifest.json',setting='checkpoint:'+run.id+':'+node.id+(generation?':repair-'+generation:''),existing=this.store.setting(setting);
   if(existing?.key===key&&existing.conversationId===node.conversationId&&existing.bucket===c.bucket&&existing.endpoint===c.endpoint&&this.store.objectInfo(key)&&this.store.objectInfo(manifestKey))return existing;
-  const directory=join(this.directory,'checkpoints',run.id);await mkdir(directory,{recursive:true,mode:0o700});const path=join(directory,node.id+'.tar.gz');if(archivePath){if(archivePath!==path)await copyFile(archivePath,path)}else await snapshotWorkspace(config,node.workspace||run.workspace,path);const size=(await stat(path)).size,hash=createHash('sha256');for await(const bytes of createReadStream(path))hash.update(bytes);const sha256=hash.digest('hex'),checkpoint={key,bucket:c.bucket,endpoint:c.endpoint,runId:run.id,nodeId:node.id,conversationId:node.conversationId,sha256,size,capturedAt:new Date().toISOString(),historical};
+  const directory=join(this.directory,'checkpoints',run.id);await mkdir(directory,{recursive:true,mode:0o700});const path=join(directory,node.id+(generation?'-repair-'+generation:'')+'.tar.gz');if(archivePath){if(archivePath!==path)await copyFile(archivePath,path)}else await snapshotWorkspace(config,node.workspace||run.workspace,path);const size=(await stat(path)).size,hash=createHash('sha256');for await(const bytes of createReadStream(path))hash.update(bytes);const sha256=hash.digest('hex'),checkpoint={key,bucket:c.bucket,endpoint:c.endpoint,runId:run.id,nodeId:node.id,conversationId:node.conversationId,sha256,size,capturedAt:new Date().toISOString(),historical};
   const partsKey=setting+':parts',identity=JSON.stringify([key,c.bucket,c.endpoint,node.conversationId,sha256]),previous=this.store.setting(partsKey);
   const parts=previous?.identity===identity?previous:{identity,capturedAt:checkpoint.capturedAt,done:{}};checkpoint.capturedAt=parts.capturedAt;
   const manifest=JSON.stringify({schemaVersion:1,...checkpoint,name:node.name,profileId:node.profileId,server:node.server,model:node.modelUsed,finishedAt:node.finishedAt,output:node.output,modelUsage:node.modelUsage||null},null,2),manifestSha=createHash('sha256').update(manifest).digest('hex');
   await this.uploadParts(partsKey,parts,[
    {name:'archive',key,sha256,upload:()=>this.putFile(relative,path,{kind:'stage-artifact',id:run.id,size,contentType:'application/gzip'})},
-   {name:'manifest',key:manifestKey,sha256:manifestSha,upload:()=>this.put('runs/'+run.id+'/stages/'+node.id+'/manifest.json',manifest,{kind:'stage-manifest',id:run.id})}
+   {name:'manifest',key:manifestKey,sha256:manifestSha,upload:()=>this.put(root+'manifest.json',manifest,{kind:'stage-manifest',id:run.id})}
   ]);this.store.setSetting(setting,checkpoint);return checkpoint;
  }
  async restoreCheckpoint(checkpoint,{reuseVerified=false}={}){

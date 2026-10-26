@@ -73,6 +73,16 @@ elif mode=='repository':
    roots.add(member.name.split('/')[0])
  if len(roots)!=1:raise RuntimeError('Repository archive must have one root')
  files=load(archive,next(iter(roots)),False);write(sys.argv[3],sys.argv[4],files);print(json.dumps({'files':len(files),'bytes':sum(map(len,files.values()))}))
+elif mode=='repair':
+ spec=json.load(sys.stdin);root=spec['runId'];original=load(spec['archive'],root)
+ plan=original.get('.canvas-collaboration/plan.json');out={p:v for p,v in original.items() if not p.startswith('.canvas-collaboration/')}
+ if plan is not None and len(plan)<=128*1024:
+  out['.canvas-collaboration/rejected-plan.json']=plan
+  out['.canvas-collaboration/plan.json']=plan
+ report={'schemaVersion':1,'runId':root,'nodeId':spec['nodeId'],'base':'rejected-plan','parents':[spec['source']['id']],'conflicts':[],'sources':[spec['source']],'lineage':[],'scheduler':spec.get('scheduler')}
+ if spec.get('repository'):report['repository']=spec['repository']
+ out['.canvas-collaboration/handoff.json']=(json.dumps(report,ensure_ascii=False,indent=2)+'\n').encode()
+ write(archive,root,out);print(json.dumps(report))
 elif mode=='merge':
  spec=json.load(sys.stdin);root=spec['runId'];base=load(spec['base'],root,False) if spec.get('base') else {};parents={p['id']:load(p['archive'],root,False) for p in spec['parents']};out={};conflicts=[]
  for path in sorted(set(base).union(*(set(f) for f in parents.values()))):
