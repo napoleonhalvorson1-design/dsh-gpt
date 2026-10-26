@@ -1,0 +1,154 @@
+{
+  "scope": "Actual useful development of compact planner context module on deployed 5.22, followed by parent integration into 5.23; no paired whole-task speed claim",
+  "executionVersion": "5.22.0",
+  "featureVersion": "5.23.0",
+  "runId": "engine-planner-context-20261027-r1",
+  "status": "succeeded",
+  "sourceCommit": "9f15f747b9f034afd7b7fe270216e5941cbc9d22",
+  "taskSha256": "2c84e846d505a5dd4f91b8800ac336a49537e176a00fff9eba40ada979df196d",
+  "adaptivePlan": {
+    "status": "applied",
+    "plannerId": "plan",
+    "sha256": "f1ae4123ed4dc1fa827b3e56f719aaf254ec35bd1f485d9d34582ed30316b1a3",
+    "appliedAt": "2026-10-26T22:44:24.744Z",
+    "directDelivery": false,
+    "goal": "实现精简规划上下文纯函数模块，完整保留已验证能力及有效观测，并提供测试与简短文档。",
+    "decisions": "由一个 Codex 实现节点完成三个关联文件及最终检查；参考其已有标准构建交付记录，避免拆分接口和重复验收，DeepSeek 的成功及中断记录不混作耗时样本。",
+    "acceptanceCriteria": [
+      "仅新增指定三个文件；纯函数输出稳定、自描述、可 JSON 序列化矩阵，遵循已有 ID 校验、能力过滤、深度与 DeepSeek 锁。",
+      "观测与原生记录严格匹配有效能力，清除额外字段并正确保留零、null 和中断语义；覆盖冻结输入及全部指定边界。",
+      "五入口夹具的 JSON 字符数实际减少；最后仅运行指定 Node 测试，失败定点修复，简短交付实际文件和检查结果。"
+    ],
+    "coordinationPolicy": "lean",
+    "reviewStages": 0,
+    "maxParallelNodes": 1
+  },
+  "performance": {
+    "schemaVersion": 1,
+    "elapsedMs": 187254,
+    "nodes": [
+      {
+        "id": "plan",
+        "queueMs": 16,
+        "preparationMs": 7347,
+        "submissionWaitMs": 16,
+        "modelMs": 25267,
+        "snapshotMs": 434,
+        "barrierMs": 4488,
+        "endToEndMs": 37552,
+        "endToEndEndField": "outputReadyAt",
+        "endToEndComplete": true,
+        "timingComplete": true
+      },
+      {
+        "id": "implement",
+        "queueMs": 4143,
+        "preparationMs": 394,
+        "submissionWaitMs": 8,
+        "modelMs": 137008,
+        "snapshotMs": 409,
+        "barrierMs": 4367,
+        "endToEndMs": 142186,
+        "endToEndEndField": "outputReadyAt",
+        "endToEndComplete": true,
+        "timingComplete": true
+      }
+    ],
+    "modelWallMs": 162275,
+    "modelWorkMs": 162275,
+    "observedPeakModels": 1,
+    "modelIntervalsComplete": true,
+    "overall": {
+      "modelRatio": 0.8666036506563277,
+      "overheadRatio": 0.13339634934367223,
+      "nonModelWallMs": 24979
+    },
+    "slowestNode": {
+      "id": "implement",
+      "endToEndMs": 142186,
+      "endField": "outputReadyAt",
+      "complete": true
+    },
+    "warnings": []
+  },
+  "nodes": [
+    {
+      "id": "plan",
+      "profileId": "codex-silicon",
+      "modelRequested": "gpt-6-astra",
+      "reasoningEffort": "medium",
+      "selectionApplied": true,
+      "runtimeContextRequested": "focused",
+      "modelUsage": {
+        "schemaVersion": 1,
+        "requestId": "df3ccef4-b1f4-43b2-8575-895da588a956",
+        "model": "gpt-6-astra",
+        "effort": "medium",
+        "scope": "acp-prompts-including-tools",
+        "elapsedMs": 23406,
+        "completedPrompts": 1,
+        "stopReason": "end_turn",
+        "tokens": {
+          "totalTokens": 70951,
+          "inputTokens": 15722,
+          "cachedReadTokens": 54528,
+          "cachedWriteTokens": 0,
+          "outputTokens": 701,
+          "thoughtTokens": 31
+        }
+      },
+      "submittedAt": "2026-10-26T22:43:50.420Z",
+      "finishedAt": "2026-10-26T22:44:15.687Z",
+      "outputReadyAt": "2026-10-26T22:44:20.609Z"
+    },
+    {
+      "id": "implement",
+      "profileId": "codex-silicon",
+      "modelRequested": "gpt-6.1-sol",
+      "reasoningEffort": "medium",
+      "selectionApplied": true,
+      "runtimeContextRequested": "focused",
+      "modelUsage": {
+        "schemaVersion": 1,
+        "requestId": "203a43db-1a02-4f4e-b929-c92bb1d50beb",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "scope": "acp-prompts-including-tools",
+        "elapsedMs": 135400,
+        "completedPrompts": 1,
+        "stopReason": "end_turn",
+        "tokens": {
+          "totalTokens": 374519,
+          "inputTokens": 46530,
+          "cachedReadTokens": 320384,
+          "cachedWriteTokens": 0,
+          "outputTokens": 7605,
+          "thoughtTokens": 483
+        }
+      },
+      "submittedAt": "2026-10-26T22:44:25.154Z",
+      "finishedAt": "2026-10-26T22:46:42.162Z",
+      "outputReadyAt": "2026-10-26T22:46:46.938Z"
+    }
+  ],
+  "wholeRealTaskSpeedupProven": false,
+  "limitations": [
+    "New module development is an actual task, not a paid smoke test.",
+    "The new compact prompt was integrated after this run; its latency effect is unmeasured.",
+    "Different tasks cannot establish a whole-task speed ratio.",
+    "All 190 imported application source files were preserved; three requested files were added."
+  ],
+  "contextSizes": {
+    "scope": "Current configured five-entry verified catalogue and persisted numeric history; no model call",
+    "profiles": 5,
+    "historyGroups": 7,
+    "capabilitiesPreserved": true,
+    "observationsPreserved": true,
+    "beforePromptChars": 5791,
+    "afterPromptChars": 4754,
+    "promptCharReductionPercent": 17.91,
+    "beforeDataChars": 3989,
+    "afterDataChars": 1968,
+    "wholeRealTaskSpeedupProven": false
+  }
+}
