@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "workbench": "https://canvas.43-173-109-57.sslip.io",
+  "repository": "napoleonhalvorson1-design/dsh-gpt",
+  "preset": "five-ai",
+  "collaborationMode": "adaptive",
+  "plannerPolicy": "strongest",
+  "coordinationPolicy": "lean",
+  "github": {
+    "baseBranch": "main",
+    "branchPrefix": "codex/",
+    "requiredChecks": [
+      "canvas-ci"
+    ],
+    "mergeApproval": "codex-after-ci",
+    "mergeMethod": "squash"
+  }
+}
