@@ -1,9 +1,11 @@
 ---
 name: openhands-collaboration
-description: "通过 OpenHands 接入引擎连接 AI、S3、GitHub、WebDAV、Google Drive、OneDrive 或通用 HTTP/OpenAPI 接口，编排跨服务流程；也支持原有五 AI 项目、任务和七彩云数据桶。用户提到此工作台、接入引擎、外部接口、五 AI 团队或配套插件维护时使用。"
+description: "通过 OpenHands 接入引擎连接 AI、S3、GitHub、WebDAV、Google Drive、OneDrive 或通用 HTTP/OpenAPI 接口，编排跨服务流程；也支持原有五 AI 项目、任务和七彩云数据桶。用于工作台操作者在 Codex 聊天中管理项目、运行、服务接入、跨服务编排或维护配套插件。已获引擎分配的隔离目录和具体职责的纯代码/文档执行分支不适用。"
 ---
 
 # OpenHands 五 AI 协作
+
+本技能面向工作台操作者。消息已分配隔离工作目录、输入及具体开发职责时，按执行分支完成本地代码与文档；协作通过本次 plan.json 交给引擎派发。操作工作台服务的明确需求再使用以下项目、接入与运行流程。
 
 用户主要通过 Codex 聊天操作服务，手机用于查看进度、预览和下载，以及少量说明修改。直接完成用户要求的工作，不要求用户手动编辑画布，不重复询问已授权的操作。
 
@@ -115,3 +117,7 @@ focused 限该次 Codex ACP 子进程的 App、插件及技能目录，保留模
 ## 并发补同步（5.15 / 插件 2.14）
 
 后台按独立项目与运行并发保存数据，空闲最多 16、有开发运行最多 4；单根失败继续处理其他根。同一任务内部的写入顺序和阶段桶屏障保留。查看 storage_status 的 lastSyncBatch 计数和失败根 kind/id；它不是 S3 请求数，lastSync 只表示完整成功。恢复只补缺失确认，不重跑已完成 AI。操作边界见 [同步说明](references/storage-sync.md)。
+
+## 新规划任务分散（5.16 / 插件 2.15）
+
+strongest 新运行按工作台保留量选择同模型、同深度的已验证入口，手动设置不改，已开始的任务继续原路由。预览只读，实际提交按最新保留量决定；modelSelection.placement 不是实际模型确认。继续时保留原规划入口及冻结策略，配置地址改变须先恢复原地址。保留量不代表服务商队列或账号容量，不能据此宣称整体快 11 倍。见 [规划说明](references/planner-placement.md)。

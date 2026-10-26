@@ -1,10 +1,10 @@
 {
   "pluginId": "plugin_asdk_app_sites_dd1b08996ae8819185f83397876ccbb5",
-  "pluginVersion": "2.14.0",
-  "releaseId": "pluginrel_6adfb45ad3808191bbf58156cd360571",
+  "pluginVersion": "2.15.0",
+  "releaseId": "pluginrel_6adfb9e7dd58819183526602112e68fe",
   "pluginUrl": "https://chatgpt.com/plugins/plugin_asdk_app_sites_dd1b08996ae8819185f83397876ccbb5",
   "websiteUrl": "https://canvas.43-173-109-57.sslip.io",
   "siteProjectId": "appgprj_6adedaf9d3488191965345dea18f91e3",
   "sourceDirectory": "plugin/dev-dd1b08996ae8819185f83397876ccbb5",
-  "minimumWebsiteVersion": "5.15.0"
+  "minimumWebsiteVersion": "5.16.0"
 }
