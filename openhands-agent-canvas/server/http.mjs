@@ -5,6 +5,7 @@ import {dirname} from 'node:path';
 import {Storage,archiveRun} from './storage.mjs';
 import {listFiles,readFileResult,downloadFileResult} from './files.mjs';
 import {Profiles} from './profiles.mjs';
+import {placePlanner} from './planner-placement.mjs';
 import {Access} from './access.mjs';
 import {createHash,timingSafeEqual} from 'node:crypto';
 import {Store} from './store.mjs';
@@ -76,7 +77,7 @@ export function createControl({database,apiKey,encryptionKey,pollMs=3000,default
       }
       if(path==='/health'&&method==='GET')return json(res,{ok:true,version:'5.6.0',integrationEngine:true,backgroundRuns:true,persistence:'sqlite'});
       if(path==='/profiles'&&method==='GET')return json(res,profiles.list());
-      if(path==='/model-policy/preview'&&method==='POST'){const data=await body(req),flow=validateWorkflow(data.workflow),bundle=profiles.compile(config(data.backend),flow);return json(res,{mode:flow.modelMode||'manual',choices:flow.nodes.filter(n=>!['start','end'].includes(n.type)).map(n=>({nodeId:n.id,name:n.name,profileId:bundle.nodeConfigs?.[n.id]?.profileId,profileLabel:bundle.nodeConfigs?.[n.id]?.profileLabel,selection:bundle.nodeConfigs?.[n.id]?.selection||null,runtimeContextRequested:bundle.nodeConfigs?.[n.id]?.runtimeContext||'inherit'})),planningPending:flow.collaborationMode==='adaptive',inferenceStarted:false})}
+      if(path==='/model-policy/preview'&&method==='POST'){const data=await body(req),flow=validateWorkflow(data.workflow),bundle=placePlanner(store,flow,profiles.compile(config(data.backend),flow));return json(res,{mode:flow.modelMode||'manual',choices:flow.nodes.filter(n=>!['start','end'].includes(n.type)).map(n=>({nodeId:n.id,name:n.name,profileId:bundle.nodeConfigs?.[n.id]?.profileId,profileLabel:bundle.nodeConfigs?.[n.id]?.profileLabel,selection:bundle.nodeConfigs?.[n.id]?.selection||null,runtimeContextRequested:bundle.nodeConfigs?.[n.id]?.runtimeContext||'inherit'})),planningPending:flow.collaborationMode==='adaptive',inferenceStarted:false})}
       if(path==='/development/projects'&&method==='POST')return json(res,createDevelopmentProject(store,profiles,await body(req)),201);
       if(path==='/projects'&&method==='GET')return json(res,{items:store.projects()});
       const projectMatch=path.match(/^\/projects\/([a-zA-Z0-9_-]{1,100})$/);

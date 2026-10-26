@@ -1,0 +1,32 @@
+{
+  "version": "5.16.0",
+  "completeGoal": false,
+  "requestedWholeTaskSpeedFactor": 11,
+  "wholeTaskSpeedFactor": null,
+  "newRealModelCalls": 0,
+  "scope": "Durable SQLite and local native HTTP protocol fixtures, not a real AI throughput measurement",
+  "commands": ["node scripts/test-planner-placement.mjs", "node scripts/test-model-policy.mjs", "node scripts/test-execution-budget.mjs"],
+  "fixture": {
+    "enqueuedRequests": 3,
+    "nativePostRequests": 3,
+    "routes": ["codex-silicon", "codex-seoul", "codex-shanghai"],
+    "modelForAllRequests": "gpt-6-astra",
+    "effortForAllRequests": "medium",
+    "controllerDatabaseReopenedBeforeRequests": true,
+    "manualSelectionPreserved": true,
+    "incompatibleDepthAndContextPeersExcluded": true,
+    "explicitFallbackPreserved": true,
+    "learnedBudgetPreservedSeconds": 600,
+    "readScopedPreviewReservesNoTask": true,
+    "resumeUsesOriginalRouteAndStrategyWithCurrentCredentials": true,
+    "changedBackendRejected": true
+  },
+  "contextChange": "Operator skill scope and execution-branch prompts distinguish local development from workbench management; no App capability or tool was removed.",
+  "limitations": [
+    "Controller reservations do not measure provider queues, CPU or account limits.",
+    "The same model on three endpoints does not prove three independent provider accounts.",
+    "Protocol fixtures prove routing and preservation, not a real model speedup.",
+    "The effect of the narrower skill scope on actual token usage remains unmeasured.",
+    "The requested overall 11x goal remains unproven."
+  ]
+}

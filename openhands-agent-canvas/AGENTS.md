@@ -98,3 +98,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.14 / 插件 2.13：AI 可按阶段设置 runtimeContext=focused/inherit，只在 profiles 声明支持时使用。纯代码阶段 focused 限本次 Codex ACP 子进程的 App/插件和技能目录；需要外部服务或相关技能则 inherit，不确定时继承。项目显式设置优先，默认及历史会话不变。三服务器配置探针不创建 thread、不发 prompt，确认后才开启入口能力；禁止更改用户账号、凭据或托管要求。续跑冻结模式与哈希策略路径，runtimeContextRequested 不是实际行为或速度证明。见 docs/runtime-context.md。
 
 5.15 / 插件 2.14：Storage.sync 将独立项目与运行作为有界并发根，空闲 16、有开发运行 4；根内版本/指针、日志块/索引和产物/清单保留先后顺序。历史根失败不阻断其他根、连接配置与备份，lastSync 仅整轮成功更新，lastSyncBatch 只给计数及最多 20 个 kind/id，不返回原始错误/凭据。关闭中止排队及本进程网络等待，等同步结束再关数据库；不声称撤销远端写入。shared/settled-pool.mjs 由真实引擎开发任务交付，经公共产物契约及签名 S3 协议测试后接入。局部夹具速度与实际开发速度分别报告。
+
+5.16 / 插件 2.15：新 strongest 规划按工作台保留量分散到同引擎、同模型、同深度的已验证入口；manual 不改，平局保留原入口，不降级，显式备用与上下文约束继续有效。迁移不缩短原已学习预算。modelSelection.placement 仅是派发选择，不是实际模型回执。既有请求和已开始阶段不改派，续跑回到原规划入口，使用当前同入口凭据和冻结策略路径；地址变化仍拒绝。只读预览不建立保留。执行分支仅完成本次隔离职责，协作交给 plan.json；工作台操作者才使用接入/运行管理流程。见 docs/planner-placement.md。
