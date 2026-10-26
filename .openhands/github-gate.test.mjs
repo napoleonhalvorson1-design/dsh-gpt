@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {githubMergeGate} from './github-gate.mjs';
+const sha='a'.repeat(40),other='b'.repeat(40),pr={state:'open',draft:false,merged:false,mergeable:true,head:{sha}},check={id:1,name:'canvas-ci',head_sha:sha,status:'completed',conclusion:'success',app:{id:1}},evidence={sha,complete:true,checkRuns:[check],statuses:[],workflowRuns:[]},input={pullRequest:pr,evidence,expectedHeadSha:sha,requiredChecks:['canvas-ci']};
+assert.equal(githubMergeGate(input).readyForApproval,true);assert.equal(githubMergeGate(input).canMerge,false);
+assert.equal(githubMergeGate({...input,approvedHeadSha:sha}).canMerge,true);assert.equal(githubMergeGate({...input,approvedHeadSha:other}).canMerge,false);
+for(const state of ['closed','merged'])assert.equal(githubMergeGate({...input,pullRequest:{...pr,state},approvedHeadSha:sha}).canMerge,false);
+for(const change of [{draft:true},{merged:true},{mergeable:false},{head:{sha:other}}])assert.equal(githubMergeGate({...input,pullRequest:{...pr,...change},approvedHeadSha:sha}).canMerge,false);
+for(const change of [{sha:other},{complete:false},{checkRuns:[]},{checkRuns:[{...check,head_sha:other}]}])assert.equal(githubMergeGate({...input,evidence:{...evidence,...change},approvedHeadSha:sha}).canMerge,false);
+for(const conclusion of ['failure','cancelled','timed_out','action_required','skipped','neutral'])assert.equal(githubMergeGate({...input,evidence:{...evidence,checkRuns:[{...check,conclusion}]},approvedHeadSha:sha}).canMerge,false);
+assert.equal(githubMergeGate({...input,evidence:{...evidence,checkRuns:[{...check,status:'in_progress'}]},approvedHeadSha:sha}).canMerge,false);
+assert.equal(githubMergeGate({...input,evidence:{...evidence,checkRuns:[{...check,id:0,conclusion:'failure'},check]},approvedHeadSha:sha}).canMerge,true);
+assert.equal(githubMergeGate({...input,evidence:{...evidence,statuses:[{id:1,context:'lint',state:'pending'}]},approvedHeadSha:sha}).canMerge,false);
+assert.equal(githubMergeGate({...input,evidence:{...evidence,workflowRuns:[{id:1,workflow_id:10,event:'pull_request',head_sha:sha,name:'build',status:'completed',conclusion:'failure'}]},approvedHeadSha:sha}).canMerge,false);
+assert.equal(githubMergeGate({...input,requiredChecks:['missing'],approvedHeadSha:sha}).canMerge,false);
+assert.equal(githubMergeGate({...input,expectedHeadSha:other,approvedHeadSha:sha}).canMerge,false);
+assert.equal(githubMergeGate().canMerge,false);
+console.log('Passed exact-head CI evidence, empty/missing/pending/failed CI, required checks, reruns, conflict/draft/closed PR, separate approval and head-change invalidation checks.');
