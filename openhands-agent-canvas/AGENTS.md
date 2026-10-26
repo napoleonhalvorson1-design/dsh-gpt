@@ -96,3 +96,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.13 / 插件 2.12：阶段可设置 executionPolicy={budgetSeconds,fallbackProfile?,fallbackModelPolicy?}，30–7200 秒，原会话两次确认停止后最多切换一次已验证备用，先确认原输入入桶，新请求及冻结配置事务保存，使用同上游的新目录。原会话恰好完成优先交付，用户取消不切换，输出保存失败不重新推理。strongest 规划默认 300 秒及同模型同深度跨入口后备，三个匹配成功观测可延长至最多 900 秒，显式节点策略优先。历史运行不变。耗时包含旧尝试，停止等待单列。见 docs/execution-budget.md；新测试不调用真实 AI。
 
 5.14 / 插件 2.13：AI 可按阶段设置 runtimeContext=focused/inherit，只在 profiles 声明支持时使用。纯代码阶段 focused 限本次 Codex ACP 子进程的 App/插件和技能目录；需要外部服务或相关技能则 inherit，不确定时继承。项目显式设置优先，默认及历史会话不变。三服务器配置探针不创建 thread、不发 prompt，确认后才开启入口能力；禁止更改用户账号、凭据或托管要求。续跑冻结模式与哈希策略路径，runtimeContextRequested 不是实际行为或速度证明。见 docs/runtime-context.md。
+
+5.15 / 插件 2.14：Storage.sync 将独立项目与运行作为有界并发根，空闲 16、有开发运行 4；根内版本/指针、日志块/索引和产物/清单保留先后顺序。历史根失败不阻断其他根、连接配置与备份，lastSync 仅整轮成功更新，lastSyncBatch 只给计数及最多 20 个 kind/id，不返回原始错误/凭据。关闭中止排队及本进程网络等待，等同步结束再关数据库；不声称撤销远端写入。shared/settled-pool.mjs 由真实引擎开发任务交付，经公共产物契约及签名 S3 协议测试后接入。局部夹具速度与实际开发速度分别报告。

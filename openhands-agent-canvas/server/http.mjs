@@ -103,11 +103,11 @@ export function createControl({database,apiKey,encryptionKey,pollMs=3000,default
     }catch(error){if(res.headersSent){res.destroy();return}json(res,{error:error instanceof ApiError?error.message:'服务暂时不可用，请稍后重试。'},error instanceof ApiError?error.status:500)}
   });
   if(startEngine)engine.start();
-  return {server,store,engine,storage,access,connectors,close:async()=>{engine.close();storage.close();await connectors.close();await new Promise(resolve=>server.close(resolve))}};
+  return {server,store,engine,storage,access,connectors,close:async()=>{engine.close();const storageClosed=storage.close();await connectors.close();await storageClosed;await new Promise(resolve=>server.close(resolve))}};
 }
 if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   const env=process.env,defaults={mode:env.OPENHANDS_MODE||'remote',baseUrl:env.OPENHANDS_BASE_URL,apiKey:env.OPENHANDS_API_KEY,model:env.OPENHANDS_MODEL||'acp:codex',acpModel:env.OPENHANDS_ACP_MODEL||'gpt-5.6-sol',workspace:env.OPENHANDS_WORKSPACE||'/srv/openhands-workspaces',commands:{codex:env.OPENHANDS_CODEX_ACP_COMMAND,'claude-code':env.OPENHANDS_CLAUDE_ACP_COMMAND}};
   const app=createControl({database:env.CANVAS_DATABASE_PATH||'/srv/openhands/control/canvas.sqlite',apiKey:env.CANVAS_CONTROL_API_KEY,encryptionKey:env.CANVAS_CONTROL_ENCRYPTION_KEY,defaults,profiles:Profiles.fromFile(env.CANVAS_AI_PROFILES_PATH)});
   app.server.listen(Number(env.CANVAS_CONTROL_PORT)||18110,'127.0.0.1',()=>console.log('OpenHands workflow service listening on loopback.'));
-  for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{app.engine.close();app.storage.close();app.connectors.close();app.server.close();setTimeout(()=>process.exit(0),30000).unref();const timer=setInterval(()=>{if(!app.engine.active.size){clearInterval(timer);app.store.close();process.exit(0)}},100);timer.unref()});
+  for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{app.engine.close();app.storage.close();app.connectors.close();app.server.close();setTimeout(()=>process.exit(0),30000).unref();const timer=setInterval(()=>{if(!app.engine.active.size&&!app.storage.busy){clearInterval(timer);app.store.close();process.exit(0)}},100);timer.unref()});
 }
