@@ -83,14 +83,14 @@ const fixture=http.createServer(async(req,res)=>{
    assert.match(req.headers.authorization||'',/AWS4-HMAC-SHA256/,'S3 requests must use Signature V4');
    const key=decodeURIComponent(parts.slice(1).join('/'));
    if(req.method==='PUT'){
-    const inputMatch=key.match(/runs\/([^/]+)\/inputs\/([^/]+)\/(workspace\.tar\.gz|handoff\.json)$/);
+    const inputMatch=key.match(/runs\/([^/]+)\/inputs\/([^/]+)(?:\/repair-\d+)?(?:\/attempt-\d+)?\/(workspace\.tar\.gz|handoff\.json)$/);
     if(inputMatch){const plan=planFor(inputMatch[1]);if(plan.inputGate?.nodeId===inputMatch[2]){plan.inputGate.entered=true;await plan.inputGate.promise}if(plan.failInput===inputMatch[2]){res.writeHead(403,{'Content-Type':'application/xml'});res.end('<Error><Code>AccessDenied</Code></Error>');return}}
-    const match=key.match(/runs\/([^/]+)\/stages\/([^/]+)\/workspace\.tar\.gz$/);
+    const match=key.match(/runs\/([^/]+)\/stages\/([^/]+)(?:\/repair-(\d+))?\/workspace\.tar\.gz$/);
     if(match){
      const plan=planFor(match[1]),nodeId=match[2];
      if(plan.checkpointDelayMs)await sleep(plan.checkpointDelayMs);
      if(plan.checkpointGate?.nodeId===nodeId){plan.checkpointGate.entered=true;await plan.checkpointGate.promise}
-     if(plan.failCheckpoint===nodeId){res.writeHead(403,{'Content-Type':'application/xml'});res.end('<Error><Code>AccessDenied</Code></Error>');return}
+     if(plan.failCheckpoint===nodeId||plan.failRepairCheckpoint&&match[3]){res.writeHead(403,{'Content-Type':'application/xml'});res.end('<Error><Code>AccessDenied</Code></Error>');return}
     }
     objects.set(key,Buffer.from(body));res.writeHead(200,{ETag:'"fixture"'});res.end();return;
    }
@@ -101,7 +101,7 @@ const fixture=http.createServer(async(req,res)=>{
   const region=parts.shift(),path='/'+parts.join('/'),target=url.searchParams.get('path');
   if(path==='/api/file/create_directory'){
    const match=target.match(/^\/workspace\/runs\/([^/]+)\/([^/]+)$/);
-   if(match&&!workspaces.has(region+target))workspaces.set(region+target,{region,path:target,runId:match[1],nodeId:match[2],files:new Map()});
+   if(match&&!workspaces.has(region+target))workspaces.set(region+target,{region,path:target,runId:match[1],nodeId:match[2].replace(/-repair-\d+$/,''),repair:/-repair-\d+$/.test(match[2]),files:new Map()});
    json({success:true});return;
   }
   if(path==='/api/file/archive'||path.endsWith('/file/archive')){
@@ -120,14 +120,18 @@ const fixture=http.createServer(async(req,res)=>{
   if(path==='/api/conversations'&&req.method==='POST'){
    const data=JSON.parse(body),ws=workspace(region,data.workspace.working_dir);assert(ws,'Conversation must use its own node workspace');
    const plan=planFor(ws.runId),record={id:data.conversation_id,runId:ws.runId,nodeId:ws.nodeId,workspace:ws.path,region,system:data.agent_settings?.agent_context?.system_message_suffix||'',prompt:data.initial_message.content[0].text,inherited:new Map(ws.files),status:'running',interrupts:0,readsAfterPause:0,readyAt:Date.now()+(plan.modelDelayMs||0)};
-   record.fail=plan.failNodes?.has(ws.nodeId)||false;creates.push(record);conversations.set(record.id,record);stageFiles(ws.nodeId,ws.files,plan);
+   record.fail=plan.failNodes?.has(ws.nodeId)||false;creates.push(record);conversations.set(record.id,record);stageFiles(ws.nodeId,ws.files,ws.repair&&plan.repairedAdaptive?{...plan,adaptive:plan.repairedAdaptive}:plan);
+   const args=data.agent_settings?.acp_args||[],value=flag=>args[args.indexOf(flag)+1];
+   if(args.includes('--request-id'))ws.files.set('.canvas-collaboration/runtime-selection.json',Buffer.from(JSON.stringify({schemaVersion:1,requestId:data.conversation_id,model:value('--model'),effort:value('--effort'),modelApplied:true,effortApplied:true})));
    if(plan.capacityGroup){const active=creates.filter(item=>item.status==='running'&&planFor(item.runId).capacityGroup===plan.capacityGroup).length;peaks.set(plan.capacityGroup,Math.max(peaks.get(plan.capacityGroup)||0,active))}
+   if(plan.uncertainCreate&&!plan.createFaultSeen){plan.createFaultSeen=true;plan.hiddenLookups=2;json({error:'Fixture lost creation acknowledgement'},503);return}
    json({id:record.id,execution_status:'running'},201);return;
   }
   const match=path.match(/^\/api\/conversations\/([^/]+)(?:\/(events\/search|interrupt|pause|run))?$/);
   if(match){
    const record=conversations.get(match[1]);if(!record){json({error:'not found'},404);return}
    const plan=planFor(record.runId);
+   if(!match[2]&&plan.hiddenLookups>0){plan.hiddenLookups--;json({error:'Fixture temporarily invisible'},404);return}
    if(['interrupt','pause'].includes(match[2])){record.interrupts++;if(!plan.unconfirmedStops?.has(record.nodeId))record.status='paused';json({success:true});return}
    if(match[2]==='run'){record.status='running';json({success:true});return}
    if(match[2]==='events/search'){
@@ -166,9 +170,9 @@ async function idle(){
  await app.close();app.store.close();app=null;
 }
 function records(runId,nodeId){return creates.filter(record=>record.runId===runId&&(!nodeId||record.nodeId===nodeId))}
-function start(id,plan={},workflow=flow){
+function start(id,plan={},workflow=flow,configuration=bundle){
  plan.hold??=new Set();plans.set(id,plan);app.store.putProject(id,workflow,0);
- const run=app.engine.enqueue({id,projectId:id,workflow},bundle);
+ const run=app.engine.enqueue({id,projectId:id,workflow},configuration);
  check(run.schedulerVersion===2,'New parallel runs use the DAG scheduler');return run;
 }
 function gate(nodeId){let release;const promise=new Promise(resolve=>{release=resolve});return {nodeId,promise,release,entered:false}}
@@ -254,6 +258,9 @@ try{
  check(records('parallel-input-failure','plan').length===1,'Input persistence retry never repeats successful inference');
 
  const singleFlow={...flow,nodes:flow.nodes.filter(n=>['start','plan','end'].includes(n.id)),edges:[['start','plan'],['plan','end']]},previousLimit=app.engine.maxNodeActive;
+ const uncertainCreation={uncertainCreate:true,hold:new Set(['plan'])};start('uncertain-creation',uncertainCreation,singleFlow);const uncertainFailed=await waitRun('uncertain-creation','failed'),reservedNative=uncertainFailed.nodes.plan.conversationId;
+ await app.engine.resume('uncertain-creation',bundle);await waitFor(()=>app.store.run('uncertain-creation').nodes.plan.handle,'Resume rediscovers the original uncertain native conversation');check(app.store.run('uncertain-creation').nodes.plan.conversationId===reservedNative&&records('uncertain-creation').length===1,'A temporarily missing acknowledgement never replaces a potentially submitted request with another identity');uncertainCreation.hold.clear();await waitRun('uncertain-creation','succeeded');
+
  app.engine.maxNodeActive=1;const slotGate=gate('plan');start('storage-slot-free',{checkpointGate:slotGate},singleFlow);await waitFor(()=>slotGate.entered,'Completed inference enters its storage barrier');
  const nextSlot={hold:new Set(['plan'])};start('storage-slot-next',nextSlot,singleFlow);await waitFor(()=>records('storage-slot-next','plan').length===1,'Another run uses the released inference slot');
  check(!app.store.run('storage-slot-free').nodes.plan.outputReady&&app.engine.nodeActive.size===1,'Storage waits release inference capacity while preserving output barriers');
@@ -370,6 +377,25 @@ try{
  const directFiles=await request('/runs/direct-delivery/files');check(directFiles.items.some(f=>f.path==='shared.txt')&&directDone.nodes.plan.outputReady&&objects.has(directDone.nodes.plan.checkpoint.key),'Direct delivery uses real artifact files and the same persistent checkpoint barrier');
  const directMissing={adaptive:{...directPlan,deliverables:['missing-implementation.js']}};start('direct-missing',directMissing,leanSeed);const directRejected=await waitRun('direct-missing','failed');check(directRejected.nodes.plan.planningRejected&&records('direct-missing').length===1,'A direct-delivery claim without its actual implementation cannot succeed');
  const directRetry={adaptive:directPlan,failCheckpoint:'plan'};start('direct-storage-retry',directRetry,leanSeed);await waitRun('direct-storage-retry','failed');directRetry.failCheckpoint=null;await app.engine.resume('direct-storage-retry',bundle);await waitRun('direct-storage-retry','succeeded');check(records('direct-storage-retry').length===1,'Direct-delivery storage retry preserves the completed coordinator without inference replay');
+
+ const strongSelection={mode:'auto',model:'gpt-6-astra',effort:'medium',complexity:'standard',planner:true,verified:true},strongConfig={...configs.plan,commands:{codex:'/fixture/codex'},policyRuntimePath:'/workspace/.canvas-runtime/fixture.py',policyModels:[{id:'gpt-6-astra',verified:true,efforts:['medium']}],selection:strongSelection},strongBundle={...bundle,nodeConfigs:{...configs,plan:strongConfig},teamProfiles:{...bundle.teamProfiles,[strongConfig.profileId]:strongConfig}},strongSeed={...leanSeed,plannerPolicy:'strongest'},missingPlan={...directPlan,deliverables:['missing-output.js']};
+ const corrected={adaptive:missingPlan,repairedAdaptive:directPlan};start('automatic-plan-repair',corrected,strongSeed,strongBundle);const correctedRun=await waitRun('automatic-plan-repair','succeeded'),correctedNode=correctedRun.nodes.plan,repairRecord=records(correctedRun.id,'plan')[1];
+ check(records(correctedRun.id).length===2&&correctedNode.autoPlanRepairCount===1&&correctedNode.attempts[0].outcome==='invalid-plan','Verified strongest planning gets one targeted correction with a distinct durable request');
+ check(correctedNode.modelRequested==='gpt-6-astra'&&correctedNode.reasoningEffort==='medium'&&repairRecord.workspace.endsWith('/plan-repair-1'),'Correction preserves the same model/depth and uses another isolated workspace');
+ check(repairRecord.prompt.includes('上一轮规划未通过校验')&&repairRecord.prompt.includes('rejected-plan.json')&&repairRecord.inherited.has('shared.txt')&&repairRecord.inherited.get('assets/binary.bin')?.equals(Buffer.from([0,13,10,255,128,1])),'Specific failure and verified prior code/binary artifacts reach the correction');
+ check(repairRecord.inherited.has('.canvas-collaboration/rejected-plan.json')&&!repairRecord.inherited.has('.canvas-collaboration/runtime-selection.json'),'Rejected plan is available without stale model-policy receipts');
+ const rejectedCheckpoint=correctedNode.attempts[0].checkpoint;check(rejectedCheckpoint.key!==correctedNode.checkpoint.key&&createHash('sha256').update(objects.get(rejectedCheckpoint.key)).digest('hex')===rejectedCheckpoint.sha256,'Original rejected snapshot remains immutable at its own bucket key');
+ const correctedPerformance=(await request('/runs/automatic-plan-repair/performance')).performance;check(correctedPerformance.modelIntervalsComplete&&correctedPerformance.nodes[0].previousAttempts.length===1&&!correctedPerformance.nodes[0].previousAttempts[0].interrupted,'Timing includes both model attempts and distinguishes completed invalid planning from an interruption');
+
+ const repairUpload={adaptive:missingPlan,repairedAdaptive:directPlan,failRepairCheckpoint:true};start('repair-storage-retry',repairUpload,strongSeed,strongBundle);const repairUploadFailed=await waitRun('repair-storage-retry','failed');check(repairUploadFailed.nodes.plan.modelCompleted&&records('repair-storage-retry').length===2,'A corrected model result is retained when its generation checkpoint fails');repairUpload.failRepairCheckpoint=false;await app.engine.resume('repair-storage-retry',strongBundle);await waitRun('repair-storage-retry','succeeded');check(records('repair-storage-retry').length===2,'Repair storage recovery does not invoke the model again');
+
+ const boundedRepair={adaptive:missingPlan};start('repair-bounded',boundedRepair,strongSeed,strongBundle);const repairBounded=await waitRun('repair-bounded','failed');check(records('repair-bounded').length===2&&repairBounded.nodes.plan.planningRejected&&repairBounded.nodes.plan.autoPlanRepairCount===1,'A second invalid plan stops instead of recursively calling models');boundedRepair.repairedAdaptive=directPlan;await app.engine.resume('repair-bounded',strongBundle);const manualCorrection=await waitRun('repair-bounded','succeeded');check(records('repair-bounded').length===3&&manualCorrection.nodes.plan.planRepair.generation===2&&manualCorrection.nodes.plan.attempts.length===2,'Explicit continuation reuses the latest rejected generation and retains both prior attempts');
+
+ const originalRepairLog=app.engine.log.bind(app.engine);let reservedRepair;app.engine.log=(id,node,text,...rest)=>{originalRepairLog(id,node,text,...rest);if(id==='repair-reserved'&&text.startsWith('规划未通过')){reservedRepair=app.store.run(id).nodes.plan.conversationId;app.engine.close()}};start('repair-reserved',{adaptive:missingPlan,repairedAdaptive:directPlan},strongSeed,strongBundle);await waitFor(()=>app.engine.closed,'Controller stops after durably preparing repair');check(records('repair-reserved').length===1&&!!reservedRepair,'Prepared correction has not dispatched a second inference before the simulated restart');await idle();await open();const resumedCorrection=await waitRun('repair-reserved','succeeded');check(resumedCorrection.nodes.plan.conversationId===reservedRepair&&records('repair-reserved').length===2,'Restart uses the same reserved correction identity exactly once');
+
+ const cancelRepairLog=app.engine.log.bind(app.engine);app.engine.log=(id,node,text,...rest)=>{cancelRepairLog(id,node,text,...rest);if(id==='repair-cancelled'&&text.startsWith('规划未通过'))app.engine.stop(id)};start('repair-cancelled',{adaptive:missingPlan,repairedAdaptive:directPlan},strongSeed,strongBundle);await waitRun('repair-cancelled','cancelled');check(records('repair-cancelled').length===1,'Cancellation after repair preparation prevents its inference');app.engine.log=cancelRepairLog;
+ start('repair-old-run',{adaptive:missingPlan,repairedAdaptive:directPlan},strongSeed,strongBundle);const oldRepair=app.store.run('repair-old-run');delete oldRepair.planRepairVersion;app.store.saveRun(oldRepair);await waitRun('repair-old-run','failed');check(records('repair-old-run').length===1,'Historical runs without the frozen opt-in do not gain automatic inference');
+ const shortBudget={...strongSeed,nodes:strongSeed.nodes.map(n=>n.id==='plan'?{...n,executionPolicy:{budgetSeconds:30}}:n)};start('repair-budget',{adaptive:missingPlan,repairedAdaptive:directPlan},shortBudget,{...strongBundle,nodeConfigs:{...strongBundle.nodeConfigs,plan:{...strongConfig,executionPolicy:{budgetSeconds:30}}}});await waitRun('repair-budget','failed');check(records('repair-budget').length===1,'Insufficient original execution budget prevents automatic correction');
  app.connectors.save('source-github',{expectedRevision:0,type:'github',label:'Repository source fixture',enabled:true,readOnly:true,config:{baseUrl:fixtureBase+'/github',allowPrivate:true,owner:'owner',auth:{type:'bearer'}},secrets:{token:'github-fixture-private'}});
  const repositoryFlow={...flow,repository:'owner/repo',branch:'main',githubConnectionId:'source-github'},sourceBefore={...repositoryFixture};start('repository-import',{},repositoryFlow);const imported=await waitRun('repository-import','succeeded'),sourceRoot=records('repository-import','plan')[0];
  check(sourceRoot.inherited.get('existing/source.js')?.toString()==='export const source = 1;\n'&&sourceRoot.inherited.get('existing/中文.bin')?.equals(Buffer.from([0,255,10,128])),'The first real native conversation receives repository source bytes and binary files');

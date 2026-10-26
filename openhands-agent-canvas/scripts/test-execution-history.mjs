@@ -21,6 +21,9 @@ try{
  const interruptedAttempt={profileId:'codex',conversationId:'timed-out-planner',modelRequested:'strong',reasoningEffort:'medium',complexity:'standard',selectionApplied:true,stopConfirmed:true,submittedAt:node.submittedAt,stoppedAt:'2026-01-01T00:00:05Z'};
  add('fallback-planner',{...node,conversationId:'fallback-planner',modelUsage:null,modelSelection:{complexity:'standard'},attempts:[interruptedAttempt]},'succeeded',{adaptivePlan:{plannerId:'build',directDelivery:true}});
  const history=executionHistory(store,team),attemptGroup=history.find(g=>g.role==='planning'&&g.complexity==='standard'),deliveryGroup=history.find(g=>g.role==='direct-implementation');assert.equal(attemptGroup.interruptedSamples,1);assert.equal(attemptGroup.observedWaitBeforeStopMsMedian,5000);assert.equal(attemptGroup.samples,0);assert.equal(deliveryGroup.samples,1);assert.equal(deliveryGroup.interruptedSamples,0,'Stopped primary is never a successful direct-delivery observation');
+ const invalidAttempt={...interruptedAttempt,conversationId:'rejected-planner',finishedAt:'2026-01-01T00:00:03Z',outcome:'invalid-plan'};
+ add('corrected-planner',{...node,conversationId:'corrected-planner',modelUsage:null,modelSelection:{complexity:'standard'},attempts:[invalidAttempt]},'succeeded',{adaptivePlan:{plannerId:'build',directDelivery:true}});
+ const repairedHistory=executionHistory(store,team).find(g=>g.role==='planning'&&g.complexity==='standard');assert.equal(repairedHistory.invalidPlanSamples,1);assert.equal(repairedHistory.interruptedSamples,1,'Completed invalid planning is not another interrupted wait');
  assert.deepEqual(executionHistory(store,{}),[]);
  console.log('Passed bound verified-model observations, completed snapshot filtering, duplicate request exclusion, partial-run samples and unknown token preservation.');
 }finally{store.close();await rm(dir,{recursive:true,force:true})}
