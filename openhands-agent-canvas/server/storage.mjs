@@ -73,8 +73,8 @@ export class Storage {
   }));const failed=saved.find(r=>r.status==='rejected');if(failed)throw failed.reason;
  }
  async persistInput(id,node){
-  const c=this.config(),root='runs/'+id+'/inputs/'+node.id+'/',size=(await stat(node.inputArchive)).size,hash=createHash('sha256');for await(const bytes of createReadStream(node.inputArchive))hash.update(bytes);
-  const sha=hash.digest('hex'),manifest=JSON.stringify(node.mergeReport,null,2),manifestSha=createHash('sha256').update(manifest).digest('hex'),setting='input-parts:'+id+':'+node.id,identity=JSON.stringify([c.endpoint,c.bucket,c.prefix,node.conversationId,sha,manifestSha]),previous=this.store.setting(setting),parts=previous?.identity===identity?previous:{identity,done:{}};
+  const c=this.config(),root='runs/'+id+'/inputs/'+node.id+(node.fallbackCount?'/attempt-'+(node.fallbackCount+1):'')+'/',size=(await stat(node.inputArchive)).size,hash=createHash('sha256');for await(const bytes of createReadStream(node.inputArchive))hash.update(bytes);
+  const sha=hash.digest('hex'),manifest=JSON.stringify(node.mergeReport,null,2),manifestSha=createHash('sha256').update(manifest).digest('hex'),setting='input-parts:'+id+':'+node.id+':'+(node.fallbackCount||0),identity=JSON.stringify([c.endpoint,c.bucket,c.prefix,node.conversationId,sha,manifestSha]),previous=this.store.setting(setting),parts=previous?.identity===identity?previous:{identity,done:{}};
   await this.uploadParts(setting,parts,[
    {name:'archive',key:c.prefix+root+'workspace.tar.gz',sha256:sha,upload:()=>this.putFile(root+'workspace.tar.gz',node.inputArchive,{kind:'stage-input',id,size,contentType:'application/gzip'})},
    {name:'manifest',key:c.prefix+root+'handoff.json',sha256:manifestSha,upload:()=>this.put(root+'handoff.json',manifest,{kind:'handoff',id})}

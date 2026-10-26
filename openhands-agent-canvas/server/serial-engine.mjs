@@ -2,6 +2,7 @@ import {transferWorkspace} from './handoff.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {ApiError,cleanText,validateConfig,upstream,conversation,eventSummary,startConversation} from '../shared/openhands.mjs';
 import {validateModelPolicy} from '../shared/model-policy.mjs';
+import {validateExecutionPolicy} from './execution-policy.mjs';
 export const ACTIVE=new Set(['queued','running','reconnecting','stopping']);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const safeId=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,100}$/.test(value);
@@ -14,7 +15,7 @@ export function validateWorkflow(input){
   if(input.repository&&(!/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}\/[a-zA-Z0-9_.-]{1,100}$/.test(input.repository)||['.','..'].includes(input.repository.split('/')[1])))throw new ApiError('仓库名称格式应为 owner/repository。');
   if(input.githubConnectionId!==undefined&&!/^[a-zA-Z0-9_-]{1,80}$/.test(input.githubConnectionId))throw new ApiError('GitHub 连接标识无效。');
   if(input.repository&&input.nodes.some(n=>n?.id==='_canvas_repository_source'))throw new ApiError('仓库运行保留 _canvas_repository_source 标识。');
-  const nodes=input.nodes.map(n=>{if(!safeId(n.id)||!['start','end','planner','research','code','review','custom'].includes(n.type)||typeof n.name!=='string'||!Number.isFinite(n.x)||!Number.isFinite(n.y))throw new ApiError('智能体节点格式无效。');return {...n,name:n.name.slice(0,100),prompt:cleanText(n.prompt,15000),liveModel:cleanText(n.liveModel,160),tools:Array.isArray(n.tools)?n.tools.filter(t=>typeof t==='string').slice(0,15):[],output:typeof n.output==='string'?n.output.slice(0,30000):null}});
+  const nodes=input.nodes.map(n=>{validateExecutionPolicy(n.executionPolicy);if(n.executionPolicy&&['start','end'].includes(n.type))throw new ApiError('执行预算只适用于智能体节点。');if(!safeId(n.id)||!['start','end','planner','research','code','review','custom'].includes(n.type)||typeof n.name!=='string'||!Number.isFinite(n.x)||!Number.isFinite(n.y))throw new ApiError('智能体节点格式无效。');return {...n,name:n.name.slice(0,100),prompt:cleanText(n.prompt,15000),liveModel:cleanText(n.liveModel,160),tools:Array.isArray(n.tools)?n.tools.filter(t=>typeof t==='string').slice(0,15):[],output:typeof n.output==='string'?n.output.slice(0,30000):null}});
   const ids=new Set(nodes.map(n=>n.id));if(ids.size!==nodes.length)throw new ApiError('智能体标识不能重复。');
   const edges=input.edges.map(e=>{if(!Array.isArray(e)||e.length!==2||!e.every(id=>ids.has(id))||e[0]===e[1])throw new ApiError('连接格式无效。');return [e[0],e[1]]});
   const degree=new Map(nodes.map(n=>[n.id,0]));edges.forEach(([,b])=>degree.set(b,degree.get(b)+1));const queue=nodes.filter(n=>!degree.get(n.id)),order=[];

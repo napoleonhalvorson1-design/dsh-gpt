@@ -13,7 +13,7 @@ export async function captureNode(config,node,runId,directory){
  const folder=join(directory,'parallel',runId);await mkdir(folder,{recursive:true,mode:0o700});const raw=join(folder,node.id+'-raw.tar.gz'),path=join(folder,node.id+'.tar.gz');
  try{await snapshotWorkspace(config,node.workspace,raw);await archiveOperation('normalize',raw,[basename(node.workspace),path,runId]);return path}finally{await unlink(raw).catch(()=>{})}
 }
-export async function mergeArchives({runId,nodeId,directory,parents,base,baseId,sources=[],lineage=[],repository,scheduler}){
- const folder=join(directory,'parallel',runId);await mkdir(folder,{recursive:true,mode:0o700});const path=join(folder,nodeId+'-input.tar.gz'),report=await archiveOperation('merge',path,[],{runId,nodeId,parents,base,baseId,sources,lineage,repository,scheduler});return {path,report};
+export async function mergeArchives({runId,nodeId,directory,parents,base,baseId,cacheKey,sources=[],lineage=[],repository,scheduler}){
+ const folder=join(directory,'parallel',runId);await mkdir(folder,{recursive:true,mode:0o700});const path=join(folder,(cacheKey||nodeId)+'-input.tar.gz'),report=await archiveOperation('merge',path,[],{runId,nodeId,parents,base,baseId,sources,lineage,repository,scheduler});return {path,report};
 }
 export async function validateMerge(path,runId,report){return archiveOperation('validate',path,[runId],report||{conflicts:[]})}

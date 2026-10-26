@@ -92,3 +92,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.11：用 `canvas runs performance --id ID` 或 `canvas_run_status` 的 view=performance 读取无模型输出的耗时摘要，历史缺失值为 null。真实对比使用 `scripts/benchmark-real-development.mjs`，必须显式 --allow-real-models；它调用实际模型和桶，不能用于常规升级检查。固定需求、源版本与模型目录，记录失败和恢复；单次成功不能证明整体快 11 倍。S3 文件上传只对临时错误用新流重试一次；阶段归档和清单的独立成功回执跨重启保留，两个都成功才交付。
 
 5.12：规划只写文件职责与必要接口，完整任务由引擎附带。server/execution-history.mjs 汇总最近 50 个运行中已入桶、已确认模型的成功阶段，以及单列的失败次数和已确认停止前等待；停止未交付不混入成功样本。耗时包括模型启动和工具，任务不同，不能宣称模型能力排名。ACP 标准 prompt-result usage 保存为 runtime-usage.json，只含数字用量；缺失保持 null，无效遥测不阻断交付。输入快照也保存独立成功回执并用新流重试。ops/install-execution-policy.mjs 在三个服务校验新脚本后原子更新受保护 profiles.json 的 policyRuntimePath（内容哈希路径），保留属主、组、权限和旧脚本；不改登录，不调用模型。
+
+5.13 / 插件 2.12：阶段可设置 executionPolicy={budgetSeconds,fallbackProfile?,fallbackModelPolicy?}，30–7200 秒，原会话两次确认停止后最多切换一次已验证备用，先确认原输入入桶，新请求及冻结配置事务保存，使用同上游的新目录。原会话恰好完成优先交付，用户取消不切换，输出保存失败不重新推理。strongest 规划默认 300 秒及同模型同深度跨入口后备，三个匹配成功观测可延长至最多 900 秒，显式节点策略优先。历史运行不变。耗时包含旧尝试，停止等待单列。见 docs/execution-budget.md；新测试不调用真实 AI。
