@@ -1,0 +1,161 @@
+{
+  "goal": "Increase capability and improve whole-task speed by 1000% (11x)",
+  "completeGoal": false,
+  "scope": "Real AI implementation of the same run-performance module requirements; includes actual native I/O and S3 barriers. No CI/PR time included.",
+  "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+  "current": {
+    "version": "5.10.0",
+    "runId": "engine-performance-live-20261027-r1",
+    "status": "succeeded",
+    "createdAt": "2026-10-26T18:12:19.255Z",
+    "finishedAt": "2026-10-26T18:19:05.192Z",
+    "metrics": {
+      "schemaVersion": 1,
+      "elapsedMs": 405937,
+      "nodes": [
+        {
+          "id": "plan",
+          "queueMs": 18,
+          "preparationMs": 285,
+          "submissionWaitMs": 10,
+          "modelMs": 215754,
+          "snapshotMs": 151,
+          "barrierMs": 187261,
+          "endToEndMs": 403461,
+          "endToEndEndField": "outputReadyAt",
+          "endToEndComplete": true,
+          "timingComplete": true
+        }
+      ],
+      "modelWallMs": 215754,
+      "modelWorkMs": 215754,
+      "observedPeakModels": 1,
+      "modelIntervalsComplete": true,
+      "overall": {
+        "modelRatio": 0.5314962666620683,
+        "overheadRatio": 0.46850373333793177,
+        "nonModelWallMs": 190183
+      },
+      "slowestNode": {
+        "id": "plan",
+        "endToEndMs": 403461,
+        "endField": "outputReadyAt",
+        "complete": true
+      },
+      "warnings": []
+    },
+    "nodes": [
+      {
+        "id": "plan",
+        "conversationId": "39f2280d-6165-4e1a-bbd0-850cd277a56a",
+        "profileId": "codex-silicon",
+        "modelUsed": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "selectionApplied": true,
+        "submittedAt": "2026-10-26T18:12:19.568Z",
+        "finishedAt": "2026-10-26T18:15:55.322Z",
+        "snapshotReadyAt": "2026-10-26T18:15:55.473Z",
+        "outputReadyAt": "2026-10-26T18:19:02.734Z"
+      }
+    ],
+    "acceptance": "Produced module, tests and documentation; task tests and shared independent artifact contract passed.",
+    "recovery": {
+      "storageFailure": true,
+      "assistantResumedAt": "2026-10-26T18:18:39.131Z",
+      "newInference": false,
+      "conversationPreserved": true
+    }
+  },
+  "baseline": {
+    "scope": "real model development, isolated controller, native files and real S3",
+    "id": "engine-performance-baseline-20261027-r1",
+    "source": "/tmp/canvas-speed-baseline-5.6.0",
+    "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+    "status": "succeeded",
+    "error": null,
+    "createdAt": "2026-10-26T18:19:57.595Z",
+    "finishedAt": "2026-10-26T18:28:05.647Z",
+    "elapsedMs": 488052,
+    "adaptivePlan": {
+      "status": "applied",
+      "plannerId": "plan",
+      "sha256": "c13f157b1baf7993b54f82b1eae597499791657e0ed0a79b802add86c56a4cf8",
+      "appliedAt": "2026-10-26T18:22:34.169Z",
+      "goal": "为 OpenHands Canvas 交付可直接放入引擎仓库的独立 Node.js 22 运行耗时分析模块、断言测试和指标说明。",
+      "decisions": "三个文件共享同一统计语义，由一个实现节点一次完成并执行必要检查后直接交付，避免集成与重复验收。",
+      "acceptanceCriteria": [
+        "交付 shared/run-performance.mjs、scripts/test-run-performance.mjs、docs/run-performance.md，无外部依赖、联网、界面或其他工作台任务；保留上游内容。",
+        "导出 analyzeRun(run,{now}={})，纯读取且返回可 JSON 序列化的白名单指标；不输出密钥、提示词或文件内容。",
+        "缺失、非法和倒序时间返回 null 及简短 warning；真实 0ms 保留；运行中区间只使用显式合法 now，不将单端历史区间计作 0ms，不假设 startedAt 为 submittedAt。",
+        "输出 schemaVersion、elapsedMs、节点分段、modelWallMs 去重并集、modelWorkMs 求和、observedPeakModels、有条件的 overall model/overhead 比例和按已知端到端区间判断的最慢节点；不完整统计明确标注覆盖程度。",
+        "准备与排队等待独立于模型执行，失败取消保留已知时长；未知不伪装为零，模型补集不描述为可消除开销。",
+        "node:assert/strict 覆盖并行重叠、运行中节点、历史缺字段、倒序、真实 0ms、非法 now、空节点和输入不变；仅运行一次 node scripts/test-run-performance.mjs，失败后定点修复并按需重跑。",
+        "文档说明接口、时间格式、端到端终点、状态处理、未知与部分统计、指标边界及不能推导的结论；最终仅简短列文件及实际检查结果。"
+      ],
+      "coordinationPolicy": "lean",
+      "reviewStages": 0,
+      "maxParallelNodes": 5
+    },
+    "nodes": [
+      {
+        "id": "plan",
+        "status": "succeeded",
+        "profileId": "codex-silicon",
+        "modelUsed": "gpt-6-astra",
+        "reasoningEffort": "medium",
+        "selectionApplied": true,
+        "startedAt": "2026-10-26T18:19:57.609Z",
+        "submittedAt": "2026-10-26T18:20:46.751Z",
+        "finishedAt": "2026-10-26T18:21:53.255Z",
+        "handoffMetrics": {
+          "files": 1,
+          "bytes": 251,
+          "durationMs": 136,
+          "maxParallelUploads": 4
+        }
+      },
+      {
+        "id": "implement",
+        "status": "succeeded",
+        "profileId": "codex-silicon",
+        "modelUsed": "gpt-6.1-sol",
+        "reasoningEffort": "medium",
+        "selectionApplied": true,
+        "startedAt": "2026-10-26T18:22:34.178Z",
+        "submittedAt": "2026-10-26T18:23:09.666Z",
+        "finishedAt": "2026-10-26T18:27:32.352Z",
+        "handoffMetrics": {
+          "files": 1,
+          "bytes": 2164,
+          "durationMs": 87,
+          "maxParallelUploads": 4
+        }
+      }
+    ],
+    "storagePrefix": "openhands-canvas/performance/engine-performance-baseline-20261027-r1/",
+    "limitations": [
+      "One run does not establish a general speedup. Compare equal-quality artifacts and record all failures.",
+      "No CI or PR time is included in controller elapsedMs."
+    ],
+    "version": "5.6.0",
+    "acceptance": "Produced module, tests and documentation; its own tests and the same independent artifact contract passed.",
+    "artifactCheckpointSha256": "0de968ac1ffef77bc1f1e0f5008690a7a70425248a0eb96cb57cc54c2cb2a46a"
+  },
+  "limitations": [
+    "Single task, not a general speedup claim.",
+    "Current run includes a real storage failure and assisted storage retry; this delay is retained.",
+    "Automatic model selection is part of each engine version; record actual model/depth choices rather than asserting equal models.",
+    "5.11 upload fixes are covered by protocol tests; this 5.10 measurement does not prove their real-world speedup.",
+    "Both artifacts passed their own tests and a shared basic contract, not an exhaustive proof of equivalence.",
+    "Sequential single-run comparison; service latency and model response variation are uncontrolled."
+  ],
+  "comparison": {
+    "baselineElapsedMs": 488052,
+    "currentElapsedMs": 405937,
+    "speedFactor": 1.2023,
+    "speedIncreasePercent": 20.23,
+    "elapsedReductionPercent": 16.83,
+    "requestedSpeedFactor": 11,
+    "achieved": false
+  }
+}

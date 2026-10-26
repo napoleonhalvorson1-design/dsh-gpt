@@ -88,3 +88,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.10 / 插件 2.9：新自托管项目可设置 repository、branch、githubConnectionId（默认 github-public）。快捷 preset 与 develop create 保留这些字段。仓库在任何推理前固定为 SHA，归档只下载一次并经校验入桶，所有分支共用同一基线；独立根分支汇合也使用源仓库基线，保留删除语义。run.repositorySource 为真实源记录；_canvas_repository_source 为保留的内部快照标识。私有读取需要后台 GitHub 连接 Contents 读权限，聊天凭据不转移。源代码不向 Agent 分发 GitHub 密钥，归档跳转只接受同源或 GitHub codeload，跳转不带认证 Header。存储失败重试不移动源提交，重启优先恢复桶快照。
 
 归档保留脚本执行位（规范化为 644/755，原生隔离目录写为 600/700），整包回执也检查执行位。helper 以内容哈希命名，保留旧 helper 供冻结的旧运行使用；升级通过 ops/install-fast-handoff.mjs，保持原配置权限和账户。GitHub commit_files 的 mode 可为 100644/100755；修改脚本保留原执行位。执行分支直接实现职责，新增协作由本次 plan.json 交给引擎派发，避免在导入源码的 AGENTS 指南中再次启动工作流。
+
+5.11：用 `canvas runs performance --id ID` 或 `canvas_run_status` 的 view=performance 读取无模型输出的耗时摘要，历史缺失值为 null。真实对比使用 `scripts/benchmark-real-development.mjs`，必须显式 --allow-real-models；它调用实际模型和桶，不能用于常规升级检查。固定需求、源版本与模型目录，记录失败和恢复；单次成功不能证明整体快 11 倍。S3 文件上传只对临时错误用新流重试一次；阶段归档和清单的独立成功回执跨重启保留，两个都成功才交付。

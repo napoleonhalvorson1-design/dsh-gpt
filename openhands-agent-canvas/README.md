@@ -281,3 +281,9 @@ CLI：`canvas models preview --project ID --mode fast`、`canvas models set --pr
 默认 plannerPolicy=strongest，规划优先选已验证的 GPT-6 Astra，首选硅谷 Codex、再用同模型其他入口；不可用时仅回退到其他已验证的强模型，目录为空则报告问题。规划只决定需求分工一次，执行仍按模型模式分配，DeepSeek 固定档位保留。plannerPolicy=manual 可保留用户明确指定的规划入口。
 
 GitHub 连接名称、配置写权限与凭据状态分开显示。未配凭据可以按 owner 读公开仓库，写操作明确不可用；账号测试读取 /user，公共接口测试不宣称登录。配置 owner 可约束目标，PAT 仍须有对应仓库权限。Codex GitHub App 与后台 PAT 为独立连接。
+
+### 5.11 / 插件 2.10：真实耗时与存储恢复
+
+`canvas runs performance --id RUN_ID` 返回队列、准备、模型、快照与桶屏障时间，并区分并行模型墙钟时间和累计工作量。MCP 可使用 `canvas_run_status({id,view:"performance"})`，不返回提示词或模型输出。历史未知值保持 null，完整规则见 [运行耗时](docs/run-performance.md)。
+
+文件上传的临时网络或服务端错误会重新打开文件流重试一次；已写入的阶段归档或清单有独立持久化回执，恢复时只补缺失部分。授权拒绝直接失败；未通过两个对象的确认前不交付，也不会重复调用已经完成的 AI。实际 AI 开发比较脚本为 `scripts/benchmark-real-development.mjs`（需显式 --allow-real-models，绝不作为升级验收）。整体提速 1000% 尚未得到实际任务证据证明。
