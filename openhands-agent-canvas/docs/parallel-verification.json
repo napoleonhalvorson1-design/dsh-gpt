@@ -1,0 +1,493 @@
+{
+  "schemaVersion": 1,
+  "websiteVersion": "5.2.0",
+  "pluginVersion": "2.2.0",
+  "projectId": "parallel-engine-20261026",
+  "runId": "parallel-engine-acceptance-20261026",
+  "url": "https://canvas.43-173-109-57.sslip.io/?project=parallel-engine-20261026&run=parallel-engine-acceptance-20261026",
+  "status": "succeeded",
+  "stages": [
+    {
+      "id": "plan",
+      "name": "规划与接口契约",
+      "profileId": "deepseek-shanghai",
+      "server": "124.222.193.46",
+      "modelUsed": "[\"deepseek-official\",\"deepseek-v4-flash\"]",
+      "submittedAt": "2026-10-26T14:06:37.616Z",
+      "finishedAt": "2026-10-26T14:10:20.807Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/plan/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "plan",
+        "sha256": "f509f5bfb3e981a47ecd2031a39f75a0e0b189eb6da59afac04195ad3868cca1",
+        "size": 9840,
+        "capturedAt": "2026-10-26T14:10:21.675Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "frontend",
+      "name": "界面并行开发",
+      "profileId": "codex-shanghai",
+      "server": "124.222.193.46",
+      "modelUsed": "gpt-6-astra",
+      "submittedAt": "2026-10-26T14:10:43.050Z",
+      "finishedAt": "2026-10-26T14:13:51.113Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/frontend/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "frontend",
+        "sha256": "f0802bb5f1835cab74f46a184ee19ef28c99b0ca98352695fd3fbb962eb38839",
+        "size": 11175,
+        "capturedAt": "2026-10-26T14:13:51.939Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "backend",
+      "name": "核心逻辑并行开发",
+      "profileId": "codex-silicon",
+      "server": "43.173.109.57",
+      "modelUsed": "gpt-6.1-sol",
+      "submittedAt": "2026-10-26T14:10:38.599Z",
+      "finishedAt": "2026-10-26T14:11:15.198Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/backend/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "backend",
+        "sha256": "670313058adbb0989c2b2dcd80964d50ca8c807de5e42aa47e308dcff30b1b64",
+        "size": 10135,
+        "capturedAt": "2026-10-26T14:11:15.416Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "test-plan",
+      "name": "并行编写测试",
+      "profileId": "codex-seoul",
+      "server": "43.128.144.115",
+      "modelUsed": "gpt-6-astra",
+      "submittedAt": "2026-10-26T14:10:40.893Z",
+      "finishedAt": "2026-10-26T14:11:56.002Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/test-plan/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "test-plan",
+        "sha256": "c7452277da3285445491a2223f0afe07a1842f3163fcf5d2b2d42d1c2ad419f0",
+        "size": 10798,
+        "capturedAt": "2026-10-26T14:11:56.717Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "audit",
+      "name": "并行验收与风险审查",
+      "profileId": "claude-silicon",
+      "server": "43.173.109.57",
+      "modelUsed": "default",
+      "submittedAt": "2026-10-26T14:10:38.805Z",
+      "finishedAt": "2026-10-26T14:12:28.414Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/audit/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "audit",
+        "sha256": "a64ca2025e34fdcbf32fdbe3f579e8ebf5eeefe64acd97dafb05c7749ff0f425",
+        "size": 14958,
+        "capturedAt": "2026-10-26T14:12:28.557Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "integrate",
+      "name": "汇合与集成",
+      "profileId": "codex-silicon",
+      "server": "43.173.109.57",
+      "modelUsed": "gpt-6.1-sol",
+      "submittedAt": "2026-10-26T14:14:12.422Z",
+      "finishedAt": "2026-10-26T14:18:12.445Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/integrate/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "integrate",
+        "sha256": "9b5f70fac6a84d65b185262b7b4bcdb0755e99d9544b925053c30256841a917c",
+        "size": 22904,
+        "capturedAt": "2026-10-26T14:18:12.753Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "verify",
+      "name": "联调测试与修复",
+      "profileId": "codex-seoul",
+      "server": "43.128.144.115",
+      "modelUsed": "gpt-6-astra",
+      "submittedAt": "2026-10-26T14:18:37.764Z",
+      "finishedAt": "2026-10-26T14:24:31.604Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/verify/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "verify",
+        "sha256": "06630e43a0ed6b5623ad74216d7a9b139c66404ca59636d35a3fafb8697c8a01",
+        "size": 29179,
+        "capturedAt": "2026-10-26T14:24:32.497Z",
+        "historical": false
+      }
+    },
+    {
+      "id": "release",
+      "name": "最终验收与交付",
+      "profileId": "claude-silicon",
+      "server": "43.173.109.57",
+      "modelUsed": "default",
+      "submittedAt": "2026-10-26T14:24:50.270Z",
+      "finishedAt": "2026-10-26T14:25:53.918Z",
+      "outputReady": true,
+      "checkpoint": {
+        "key": "openhands-canvas/runs/parallel-engine-acceptance-20261026/stages/release/workspace.tar.gz",
+        "bucket": "zzx123-u1aya4fk",
+        "endpoint": "https://s3.7caiyun.com",
+        "runId": "parallel-engine-acceptance-20261026",
+        "nodeId": "release",
+        "sha256": "5d2844cb99b76a2629e53bdd2a46e822316005a196fe8de96428d59a43c76bba",
+        "size": 30797,
+        "capturedAt": "2026-10-26T14:25:54.043Z",
+        "historical": false
+      }
+    }
+  ],
+  "actualNativeConcurrency": {
+    "peak": 3,
+    "proof": [
+      {
+        "at": "2026-10-26T14:10:49.564Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "backend",
+            "profileId": "codex-silicon",
+            "nativeStatus": "running",
+            "model": "gpt-6.1-sol"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:10:55.388Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "backend",
+            "profileId": "codex-silicon",
+            "nativeStatus": "running",
+            "model": "gpt-6.1-sol"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:01.489Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "backend",
+            "profileId": "codex-silicon",
+            "nativeStatus": "running",
+            "model": "gpt-6.1-sol"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:07.192Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "backend",
+            "profileId": "codex-silicon",
+            "nativeStatus": "running",
+            "model": "gpt-6.1-sol"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:13.686Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "backend",
+            "profileId": "codex-silicon",
+            "nativeStatus": "running",
+            "model": "gpt-6.1-sol"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:25.675Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "frontend",
+            "profileId": "codex-shanghai",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:31.536Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "frontend",
+            "profileId": "codex-shanghai",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:37.532Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "frontend",
+            "profileId": "codex-shanghai",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:43.445Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "frontend",
+            "profileId": "codex-shanghai",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      },
+      {
+        "at": "2026-10-26T14:11:49.687Z",
+        "nativeRunning": 3,
+        "agents": [
+          {
+            "id": "frontend",
+            "profileId": "codex-shanghai",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "test-plan",
+            "profileId": "codex-seoul",
+            "nativeStatus": "running",
+            "model": "gpt-6-astra"
+          },
+          {
+            "id": "audit",
+            "profileId": "claude-silicon",
+            "nativeStatus": "running",
+            "model": "default"
+          }
+        ]
+      }
+    ]
+  },
+  "ownershipAndMerge": {
+    "branchDiffs": {
+      "frontend": [
+        "web/index.html"
+      ],
+      "backend": [
+        "server/sum.mjs"
+      ],
+      "test-plan": [
+        "tests/sum.test.mjs"
+      ],
+      "audit": [
+        "docs/acceptance.md"
+      ]
+    },
+    "unchangedSharedBaseline": true,
+    "allBranchContentsMergedExactly": true,
+    "mergeParents": [
+      "frontend",
+      "backend",
+      "test-plan",
+      "audit"
+    ],
+    "mergeBase": "plan",
+    "conflicts": [],
+    "inputFiles": [
+      "CONTRACT.md",
+      "PLAN.md",
+      "docs/acceptance.md",
+      "server/sum.mjs",
+      "tests/sum.test.mjs",
+      "web/index.html"
+    ]
+  },
+  "controllerRecovery": {
+    "at": "2026-10-26T14:15:17.955Z",
+    "status": "running",
+    "active": [
+      "integrate"
+    ],
+    "preservedConversations": true,
+    "preservedSuccessfulCheckpoints": true,
+    "submittedBefore": 6
+  },
+  "artifact": {
+    "sha256": "5d2844cb99b76a2629e53bdd2a46e822316005a196fe8de96428d59a43c76bba",
+    "size": 30797
+  },
+  "checks": {
+    "parallelProtocol": 90,
+    "collaborationSafety": 37,
+    "actualAppTests": 50,
+    "liveBrowserChecks": 15,
+    "widths": [
+      320,
+      360,
+      390,
+      1440
+    ],
+    "browserErrors": 0
+  },
+  "storage": {
+    "bucket": "zzx123-u1aya4fk",
+    "objects": 57,
+    "stageObjects": 16,
+    "inputObjects": 16,
+    "hasFinalArtifact": true,
+    "lastError": null
+  }
+}

@@ -10,9 +10,11 @@
     "baseBranch": "main",
     "branchPrefix": "codex/",
     "requiredChecks": [
-      "canvas-ci"
+      "canvas-ci",
+      "engine-ci"
     ],
     "mergeApproval": "codex-after-ci",
     "mergeMethod": "squash"
-  }
+  },
+  "sourceDirectory": "openhands-agent-canvas"
 }

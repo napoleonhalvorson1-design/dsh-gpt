@@ -1,0 +1,10 @@
+{
+  "repository": "napoleonhalvorson1-design/dsh-gpt",
+  "commitSha": "22d6253dde9befeb2972d6569cf5f55ce8f289ee",
+  "files": 7,
+  "bytes": 144885,
+  "archiveSha256": "b094ce1eae142f328fdc50725664e3922f8cdd77bc29d353a21aab6259ae28c7",
+  "publicReadVerified": true,
+  "inferenceStarted": false,
+  "scope": "Real read-only GitHub ref resolution, archive redirect/download and normalized source snapshot; S3 barrier, private-header isolation and restart covered by protocol fixtures."
+}

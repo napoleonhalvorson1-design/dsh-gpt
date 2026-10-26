@@ -1,0 +1,249 @@
+{
+  "baselineVersion": "5.6.0",
+  "currentVersion": "5.7.0",
+  "completeGoal": false,
+  "goal": "Improve engine capability and reach 4x full task speed; real AI end-to-end proof remains outstanding.",
+  "nativeHandoff": {
+    "scope": "real three-server handoff, all file bytes verified, no model inference",
+    "results": [
+      {
+        "server": "deepseek-shanghai",
+        "files": 16,
+        "legacy": {
+          "elapsedMs": 3688,
+          "verifiedFiles": 16,
+          "bytes": 28205
+        },
+        "bulk": {
+          "elapsedMs": 1259,
+          "verifiedFiles": 16,
+          "bytes": 28205
+        },
+        "speedup": 2.93
+      },
+      {
+        "server": "deepseek-shanghai",
+        "files": 80,
+        "legacy": {
+          "elapsedMs": 14419,
+          "verifiedFiles": 80,
+          "bytes": 156205
+        },
+        "bulk": {
+          "elapsedMs": 1629,
+          "verifiedFiles": 80,
+          "bytes": 156205
+        },
+        "speedup": 8.85
+      },
+      {
+        "server": "deepseek-shanghai",
+        "files": 400,
+        "legacy": {
+          "elapsedMs": 75862,
+          "verifiedFiles": 400,
+          "bytes": 856205
+        },
+        "bulk": {
+          "elapsedMs": 2868,
+          "verifiedFiles": 400,
+          "bytes": 856205
+        },
+        "speedup": 26.45
+      },
+      {
+        "server": "codex-silicon",
+        "files": 16,
+        "legacy": {
+          "elapsedMs": 425,
+          "verifiedFiles": 16,
+          "bytes": 28205
+        },
+        "bulk": {
+          "elapsedMs": 229,
+          "verifiedFiles": 16,
+          "bytes": 28205
+        },
+        "speedup": 1.86
+      },
+      {
+        "server": "codex-silicon",
+        "files": 80,
+        "legacy": {
+          "elapsedMs": 1204,
+          "verifiedFiles": 80,
+          "bytes": 156205
+        },
+        "bulk": {
+          "elapsedMs": 321,
+          "verifiedFiles": 80,
+          "bytes": 156205
+        },
+        "speedup": 3.75
+      },
+      {
+        "server": "codex-silicon",
+        "files": 400,
+        "legacy": {
+          "elapsedMs": 6672,
+          "verifiedFiles": 400,
+          "bytes": 856205
+        },
+        "bulk": {
+          "elapsedMs": 489,
+          "verifiedFiles": 400,
+          "bytes": 856205
+        },
+        "speedup": 13.64
+      },
+      {
+        "server": "codex-seoul",
+        "files": 16,
+        "legacy": {
+          "elapsedMs": 2821,
+          "verifiedFiles": 16,
+          "bytes": 28205
+        },
+        "bulk": {
+          "elapsedMs": 1025,
+          "verifiedFiles": 16,
+          "bytes": 28205
+        },
+        "speedup": 2.75
+      },
+      {
+        "server": "codex-seoul",
+        "files": 80,
+        "legacy": {
+          "elapsedMs": 10959,
+          "verifiedFiles": 80,
+          "bytes": 156205
+        },
+        "bulk": {
+          "elapsedMs": 1115,
+          "verifiedFiles": 80,
+          "bytes": 156205
+        },
+        "speedup": 9.83
+      },
+      {
+        "server": "codex-seoul",
+        "files": 400,
+        "legacy": {
+          "elapsedMs": 52117,
+          "verifiedFiles": 400,
+          "bytes": 856205
+        },
+        "bulk": {
+          "elapsedMs": 1129,
+          "verifiedFiles": 400,
+          "bytes": 856205
+        },
+        "speedup": 46.16
+      }
+    ]
+  },
+  "largeTransfer": [
+    {
+      "profile": "deepseek-shanghai",
+      "bytes": 5242880,
+      "verified": true,
+      "durationMs": 14717
+    },
+    {
+      "profile": "codex-silicon",
+      "bytes": 5242880,
+      "verified": true,
+      "durationMs": 1242
+    },
+    {
+      "profile": "codex-seoul",
+      "bytes": 5242880,
+      "verified": true,
+      "durationMs": 3395
+    }
+  ],
+  "mergeMemory": {
+    "scope": "112 MiB workspace, common base plus four identical parents, 256 MiB process ceiling",
+    "results": [
+      {
+        "version": "baseline",
+        "success": false,
+        "maxRssKiB": 250888,
+        "memoryCeilingMiB": 256,
+        "error": "MemoryError: Insufficient memory for buffer allocation"
+      },
+      {
+        "version": "current",
+        "success": true,
+        "maxRssKiB": 21648,
+        "memoryCeilingMiB": 256,
+        "verifiedBytes": 117440512
+      }
+    ]
+  },
+  "pipelineFixture": {
+    "scope": "complete engine pipeline with real filesystem/protocol/S3 fixtures and controlled model responses; not real model inference",
+    "baseline": "5.6.0",
+    "current": "5.7.0",
+    "results": [
+      {
+        "files": 16,
+        "modelMs": 500,
+        "nativeLatencyMs": 100,
+        "storageLatencyMs": 200,
+        "baseline": {
+          "elapsedMs": 10572,
+          "requests": 152,
+          "modelCalls": 5,
+          "verifiedFiles": 20
+        },
+        "current": {
+          "elapsedMs": 6692,
+          "requests": 80,
+          "modelCalls": 5,
+          "verifiedFiles": 20
+        },
+        "speedup": 1.58
+      },
+      {
+        "files": 80,
+        "modelMs": 500,
+        "nativeLatencyMs": 100,
+        "storageLatencyMs": 200,
+        "baseline": {
+          "elapsedMs": 17488,
+          "requests": 408,
+          "modelCalls": 5,
+          "verifiedFiles": 84
+        },
+        "current": {
+          "elapsedMs": 6947,
+          "requests": 80,
+          "modelCalls": 5,
+          "verifiedFiles": 84
+        },
+        "speedup": 2.52
+      },
+      {
+        "files": 400,
+        "modelMs": 500,
+        "nativeLatencyMs": 100,
+        "storageLatencyMs": 200,
+        "baseline": {
+          "elapsedMs": 50960,
+          "requests": 1688,
+          "modelCalls": 5,
+          "verifiedFiles": 404
+        },
+        "current": {
+          "elapsedMs": 7919,
+          "requests": 80,
+          "modelCalls": 5,
+          "verifiedFiles": 404
+        },
+        "speedup": 6.44
+      }
+    ]
+  }
+}

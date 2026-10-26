@@ -1,0 +1,12 @@
+{
+  "name": "openhands-canvas",
+  "interface": {"displayName": "OpenHands 工作台"},
+  "plugins": [
+    {
+      "name": "dev-dd1b08996ae8819185f83397876ccbb5",
+      "source": {"source": "local", "path": "./plugin/dev-dd1b08996ae8819185f83397876ccbb5"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "title": "五 AI 自主协作项目",
+  "task": "在这里填入用户实际要求，再保存项目并按用户指令执行。",
+  "executionProfile": "codex-silicon",
+  "executionMode": "parallel",
+  "maxParallelNodes": 5,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "任务起点",
+      "x": 0,
+      "y": 290
+    },
+    {
+      "id": "plan",
+      "type": "planner",
+      "name": "按需求规划协作",
+      "executionProfile": "codex-silicon",
+      "prompt": "简短理解需求并决定实干分工，产出可执行计划。优先完成功能，最后由实干节点做必要检查并直接交付，避免例行审查、长报告和重复验收。",
+      "tools": [
+        "文件读写",
+        "终端"
+      ],
+      "x": 230,
+      "y": 290
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "name": "交付结果",
+      "x": 1730,
+      "y": 290
+    }
+  ],
+  "edges": [
+    [
+      "start",
+      "plan"
+    ],
+    [
+      "plan",
+      "end"
+    ]
+  ],
+  "modelMode": "auto",
+  "reasoningEffort": "auto",
+  "collaborationMode": "adaptive",
+  "coordinationPolicy": "lean",
+  "plannerPolicy": "strongest"
+}

@@ -1,0 +1,95 @@
+{
+  "defaultId": "codex-silicon",
+  "items": [
+    {
+      "id": "deepseek-shanghai",
+      "label": "上海 · DeepSeek",
+      "server": "124.222.193.46",
+      "engine": "DeepSeek Harness",
+      "verifiedAt": null,
+      "config": {
+        "mode": "remote",
+        "baseUrl": "https://oh-agent.43-173-109-57.sslip.io/shanghai",
+        "apiKey": "REPLACE_WITH_PRIVATE_AGENT_SERVER_KEY",
+        "model": "acp:deepseek",
+        "acpModel": "",
+        "workspace": "/srv/openhands-workspaces",
+        "commands": {
+          "deepseek": "/opt/openhands-agent/dsh-acp.sh"
+        }
+      }
+    },
+    {
+      "id": "codex-silicon",
+      "label": "硅谷 · Codex",
+      "server": "43.173.109.57",
+      "engine": "Codex",
+      "verifiedAt": null,
+      "config": {
+        "mode": "remote",
+        "baseUrl": "https://oh-agent.43-173-109-57.sslip.io/silicon",
+        "apiKey": "REPLACE_WITH_PRIVATE_AGENT_SERVER_KEY",
+        "model": "acp:codex",
+        "acpModel": "gpt-6.1-sol",
+        "workspace": "/srv/openhands-silicon/workspaces",
+        "commands": {
+          "codex": "/opt/openhands-silicon/acp/node_modules/.bin/codex-acp"
+        }
+      }
+    },
+    {
+      "id": "claude-silicon",
+      "label": "硅谷 · Claude",
+      "server": "43.173.109.57",
+      "engine": "Claude Code",
+      "verifiedAt": null,
+      "config": {
+        "mode": "remote",
+        "baseUrl": "https://oh-agent.43-173-109-57.sslip.io/silicon",
+        "apiKey": "REPLACE_WITH_PRIVATE_AGENT_SERVER_KEY",
+        "model": "acp:claude-code",
+        "acpModel": "",
+        "workspace": "/srv/openhands-silicon/workspaces",
+        "commands": {
+          "claude-code": "/opt/openhands-silicon/acp/node_modules/.bin/claude-agent-acp"
+        }
+      }
+    },
+    {
+      "id": "codex-shanghai",
+      "label": "上海 · Codex",
+      "server": "124.222.193.46",
+      "engine": "Codex",
+      "verifiedAt": null,
+      "config": {
+        "mode": "remote",
+        "baseUrl": "https://oh-agent.43-173-109-57.sslip.io/shanghai",
+        "apiKey": "REPLACE_WITH_PRIVATE_AGENT_SERVER_KEY",
+        "model": "acp:codex",
+        "acpModel": "gpt-6-astra",
+        "workspace": "/srv/openhands-workspaces",
+        "commands": {
+          "codex": "/opt/openhands-agent/acp/node_modules/.bin/codex-acp"
+        }
+      }
+    },
+    {
+      "id": "codex-seoul",
+      "label": "首尔 · Codex",
+      "server": "43.128.144.115",
+      "engine": "Codex",
+      "verifiedAt": null,
+      "config": {
+        "mode": "remote",
+        "baseUrl": "https://oh-agent.43-173-109-57.sslip.io/seoul",
+        "apiKey": "REPLACE_WITH_PRIVATE_AGENT_SERVER_KEY",
+        "model": "acp:codex",
+        "acpModel": "gpt-6-astra",
+        "workspace": "/srv/openhands-seoul/workspaces",
+        "commands": {
+          "codex": "/opt/openhands-seoul/acp/node_modules/.bin/codex-acp"
+        }
+      }
+    }
+  ]
+}

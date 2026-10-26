@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {once} from 'node:events';
+import {createControl} from '../server/http.mjs';
+const dir=await mkdtemp(join(tmpdir(),'canvas-integrations-'));const control=createControl({database:join(dir,'test.sqlite'),apiKey:'control-only-test',encryptionKey:'test-encryption-only',startEngine:false,storageEnvironment:{}});control.server.listen(0,'127.0.0.1');await once(control.server,'listening');const base='http://127.0.0.1:'+control.server.address().port;
+const expectedPluginRelease=JSON.parse(await readFile('plugin/release.json','utf8'));
+let checks=0;const ok=(x,label)=>{assert.ok(x,label);checks++};
+const source=await readFile('dist/server/index.js','utf8'),worker=(await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default,env={CANVAS_ACCESS_PASSWORD:'test-password',CANVAS_SESSION_SECRET:'session-test',CANVAS_CONTROL_URL:base,CANVAS_CONTROL_API_KEY:'control-only-test'};
+const call=async(path,{method='GET',body,cookie,token,origin='https://canvas.example',principal}={})=>worker.fetch(new Request('https://canvas.example'+path,{method,headers:{'Content-Type':'application/json',Origin:origin,...(cookie?{Cookie:cookie}:{}),...(token?{Authorization:'Bearer '+token}:{}),...(principal?{'oai-authenticated-user-id':principal}:{})},...(body?{body:JSON.stringify(body)}:{})}),env);
+const body=async r=>r.json();
+const flow={title:'CLI test',task:'Test',nodes:[{id:'start',type:'start',name:'Start',x:0,y:0},{id:'agent',type:'custom',name:'Agent',prompt:'test',x:200,y:0}],edges:[['start','agent']]};
+try{
+ const login=await call('/api/login',{method:'POST',body:{password:'test-password'}}),cookie=login.headers.get('Set-Cookie').split(';')[0];
+ ok((await call('/api/projects')).status===401,'No anonymous project access');
+ const unauthenticatedPackage=await call('/downloads/openhands-agent-canvas-plugin.zip');ok(unauthenticatedPackage.status===303,'Plugin download requires workbench login');const pluginMetadata=await body(await call('/downloads/plugin-release.json',{cookie}));const pluginDownload=await call('/downloads/openhands-agent-canvas-plugin.zip',{cookie}),pluginBytes=new Uint8Array(await pluginDownload.arrayBuffer());ok(pluginDownload.status===200&&pluginDownload.headers.get('Content-Type')==='application/zip'&&pluginBytes[0]===80&&pluginBytes[1]===75,'Authenticated plugin download contains real ZIP bytes');ok(pluginMetadata.pluginVersion===expectedPluginRelease.pluginVersion&&pluginMetadata.pluginId==='plugin_asdk_app_sites_dd1b08996ae8819185f83397876ccbb5'&&pluginDownload.headers.get('Content-Disposition').includes(pluginMetadata.pluginVersion),'Website download metadata matches paired plugin version');ok(Buffer.from(await crypto.subtle.digest('SHA-256',pluginBytes)).toString('hex')===pluginMetadata.sha256,'Published ZIP checksum matches release metadata');
+ const created=await body(await call('/api/auth/tokens',{method:'POST',body:{name:'read-only',scopes:['read']},cookie}));
+ ok(created.token?.startsWith('ohc_'),'Revocable token created');
+ ok((await call('/api/projects',{token:created.token,origin:''})).status===200,'Machine token can read without browser Origin');const actualFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('temporary outage')};try{ok((await call('/api/projects',{token:created.token,origin:''})).status===503,'Controller outage is retriable 503, not invalid authentication')}finally{globalThis.fetch=actualFetch}
+ ok((await call('/api/projects/test',{method:'PUT',body:{state:flow,expectedRevision:0},token:created.token,origin:''})).status===403,'Read-only token cannot write');
+ ok((await call('/api/backend',{method:'POST',body:{mode:'demo'},token:created.token,origin:''})).status===403,'Machine token cannot modify backend');
+ ok((await call('/api/auth/tokens',{method:'POST',body:{},token:created.token,origin:''})).status===403,'Machine token cannot mint tokens');
+ ok((await call('/api/auth/check',{method:'POST',body:{token:created.token},cookie})).status===404,'Private control auth interface not exposed');
+ const full=await body(await call('/api/auth/tokens',{method:'POST',body:{name:'full'},cookie}));
+ ok((await call('/api/projects/cli-project',{method:'PUT',body:{state:flow,expectedRevision:0},token:full.token,origin:''})).status===200,'CLI can save real durable project');
+ const tokens=await body(await call('/api/auth/tokens',{cookie}));ok(!JSON.stringify(tokens).includes(full.token),'Token plaintext never returned again');
+ await call('/api/auth/tokens/'+created.id,{method:'DELETE',cookie});ok((await call('/api/projects',{token:created.token,origin:''})).status===401,'Revocation immediately denies API');
+ const mcp=async(name,args={},principal)=>body(await call('/mcp',{method:'POST',body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}},principal}));
+ ok((await mcp('canvas_list_projects')).result.isError,'MCP requires platform identity');
+ ok((await mcp('canvas_list_projects',{},'test-codex-user')).result.isError,'Unbound public viewer cannot read projects');
+ const claim=await body(await call('/api/auth/claim',{method:'POST',body:{},cookie}));ok(!(await mcp('canvas_connect',{code:claim.code},'test-codex-user')).result.isError,'Owner connection code binds Codex principal');
+ ok((await mcp('canvas_connect',{code:claim.code},'other-user')).result.isError,'Connection code single use');
+ const listed=await mcp('canvas_list_projects',{},'test-codex-user');ok(JSON.parse(listed.result.content[0].text).items.some(p=>p.id==='cli-project'),'Bound Codex reads same CLI project');
+ const pairedInfo=await mcp('canvas_plugin_info',{},'test-codex-user');ok(!pairedInfo.result.isError&&JSON.parse(pairedInfo.result.content[0].text).pluginVersion===pluginMetadata.pluginVersion,'Chat can read matching paired website/plugin version');
+ const details=await mcp('canvas_update_project_details',{id:'cli-project',expectedRevision:1,title:'Codex 聊天修改',task:'新的任务说明'},'test-codex-user');ok(!details.result.isError,'Codex can edit project details without replacing graph');const updatedDetails=JSON.parse(details.result.content[0].text);ok(updatedDetails.revision===2&&updatedDetails.state.task==='新的任务说明'&&JSON.stringify(updatedDetails.state.edges)===JSON.stringify(flow.edges)&&updatedDetails.state.nodes[1].prompt==='test','Detail update preserves nodes and edges');ok((await mcp('canvas_update_project_details',{id:'cli-project',expectedRevision:1,task:'stale'},'test-codex-user')).result.isError,'Stale chat edit cannot overwrite mobile changes');ok(control.store.listRuns().length===0,'Chat detail edits never start inference');
+ ok((await body(await call('/api/auth/principals',{cookie}))).items.length===1,'Bound Codex accounts visible to owner');await call('/api/auth/principals/test-codex-user',{method:'DELETE',cookie});ok((await mcp('canvas_list_projects',{},'test-codex-user')).result.isError,'Owner can revoke MCP binding immediately');
+ const discovery=await body(await call('/mcp',{method:'POST',body:{jsonrpc:'2.0',id:2,method:'server/discover'}}));ok(discovery.result.supportedVersions.includes('2026-07-28'),'MCP discovery supported');
+ const originalStorageList=control.storage.list.bind(control.storage);control.storage.list=async input=>({ok:true,items:[{key:'read-only.txt',size:1}],hasMore:false,nextCursor:null});
+ ok((await call('/api/storage/list?limit=20',{token:full.token,origin:''})).status===200,'CLI can list bucket objects through authorized read-only proxy');
+ ok((await call('/api/storage/list',{method:'POST',body:{},token:full.token,origin:''})).status===403,'Machine cannot mutate storage listing route');
+ const secondClaim=await body(await call('/api/auth/claim',{method:'POST',body:{},cookie}));await mcp('canvas_connect',{code:secondClaim.code},'storage-codex-user');const storedList=await mcp('canvas_list_storage_objects',{limit:20},'storage-codex-user');ok(!storedList.result.isError&&JSON.parse(storedList.result.content[0].text).items[0].key==='read-only.txt','MCP lists same bucket objects without secrets');control.storage.list=originalStorageList;
+ const savedS3=await body(await call('/api/storage',{method:'PUT',cookie,body:{enabled:true,endpoint:'https://s3.example.com',bucket:'canvas-bucket',prefix:'canvas/',accessKeyId:'private-test-access-key',secretAccessKey:'private-test-secret-key',region:'us-east-1'}}));ok(savedS3.hasCredentials&&!JSON.stringify(savedS3).includes('private-test'),'S3 credentials excluded from API');
+ const encrypted=control.store.db.prepare("SELECT value FROM settings WHERE name='s3'").get().value;ok(!encrypted.includes('private-test'),'S3 credentials encrypted in SQLite');
+ ok((await call('/api/storage',{method:'PUT',body:{enabled:false},token:full.token,origin:''})).status===403,'Machine token cannot change S3 credentials');
+ console.log(`Passed ${checks} machine token, revocation, scope, MCP binding, code replay, and encrypted S3 settings checks.`);
+}finally{await control.close();control.store.close();await rm(dir,{recursive:true,force:true})}

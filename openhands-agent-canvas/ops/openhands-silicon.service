@@ -1,0 +1,34 @@
+[Unit]
+Description=OpenHands Agent Server for Silicon Valley Codex and Claude
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/srv/openhands-silicon/state
+EnvironmentFile=/etc/openhands-silicon/runtime.env
+Environment=HOME=/home/ubuntu
+Environment=PATH=/home/ubuntu/.local/bin:/opt/openhands-silicon/acp/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+Environment=XDG_CONFIG_HOME=/srv/openhands-silicon/state/config
+Environment=XDG_CACHE_HOME=/srv/openhands-silicon/state/cache
+Environment=CLAUDE_CODE_EXECUTABLE=/home/ubuntu/.local/bin/claude
+Environment=OPENHANDS_SUPPRESS_BANNER=1
+Environment=DISABLE_TELEMETRY=true
+Environment=OH_CONVERSATION_IDLE_TTL_SECONDS=45
+ExecStart=/opt/openhands-silicon/.venv/bin/python -m openhands.agent_server --host 127.0.0.1 --port 18182
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/openhands-silicon /home/ubuntu/.codex /home/ubuntu/.claude /home/ubuntu/.openhands
+InaccessiblePaths=-/home/ubuntu/Documents -/home/ubuntu/.ssh -/root -/etc/openhands-control -/etc/openhands-canvas/ssh
+MemoryMax=1200M
+CPUQuota=150%
+TasksMax=256
+CapabilityBoundingSet=
+[Install]
+WantedBy=multi-user.target

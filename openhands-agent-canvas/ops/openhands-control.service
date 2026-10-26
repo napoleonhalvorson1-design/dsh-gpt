@@ -1,0 +1,30 @@
+[Unit]
+Description=OpenHands persistent workflow service
+After=network-online.target openhands-shanghai-tunnel.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=openhands-control
+Group=openhands-control
+WorkingDirectory=/opt/openhands-control
+EnvironmentFile=/etc/openhands-control/runtime.env
+Environment=NODE_NO_WARNINGS=1
+ExecStart=/opt/openhands-control/node /opt/openhands-control/server/http.mjs
+Restart=always
+RestartSec=3
+TimeoutStopSec=35
+UMask=0077
+MemoryMax=256M
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/openhands/control
+InaccessiblePaths=-/srv/openhands/settings -/etc/openhands-canvas/ssh
+CapabilityBoundingSet=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+[Install]
+WantedBy=multi-user.target

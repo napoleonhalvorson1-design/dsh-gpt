@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "pluginId": "plugin_asdk_app_sites_dd1b08996ae8819185f83397876ccbb5",
+  "appId": "asdk_app_sites_dd1b08996ae8819185f83397876ccbb5",
+  "siteProjectId": "appgprj_6adedaf9d3488191965345dea18f91e3",
+  "minimumWebsiteVersion": "5.10.0",
+  "websiteOrigin": "https://canvas.43-173-109-57.sslip.io",
+  "mcpEndpoint": "https://openhands-agent-canvas-q7m2.awakesugar5.chatgpt.site/mcp",
+  "requiredTools": [
+    "canvas_connect",
+    "canvas_list_projects",
+    "canvas_get_project",
+    "canvas_save_project",
+    "canvas_start_run",
+    "canvas_run_status",
+    "canvas_run_events",
+    "canvas_list_files",
+    "canvas_read_file",
+    "canvas_storage_status",
+    "canvas_engine_types",
+    "canvas_engine_connections",
+    "canvas_engine_invoke",
+    "canvas_engine_job",
+    "canvas_engine_save_pipeline",
+    "canvas_engine_run_pipeline"
+  ],
+  "dataBucket": "zzx123-u1aya4fk",
+  "dataPrefix": "openhands-canvas/"
+}

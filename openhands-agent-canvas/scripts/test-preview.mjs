@@ -1,0 +1,17 @@
+import {startBrowserFixture} from './browser-fixture.mjs';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
+import {readFile} from 'node:fs/promises';import assert from 'node:assert/strict';
+const worker=(await import('data:text/javascript;base64,'+Buffer.from(await readFile('dist/server/index.js')).toString('base64'))).default,env={CANVAS_ACCESS_PASSWORD:'preview-test',CANVAS_SESSION_SECRET:'preview-secret'};
+const files={
+ 'index.html':'<!doctype html><html><head><link rel="stylesheet" href="assets/site.css"></head><body><button id="count">0</button><img id="image" src="assets/pixel.svg"><script src="assets/app.js"></script></body></html>',
+ 'assets/site.css':'#count { background: rgb(12, 34, 56); color: white; }',
+ 'assets/app.js':"const button=document.querySelector('#count');let count=Number(localStorage.getItem('count')||0);button.textContent=count;button.onclick=()=>{button.textContent=++count;localStorage.setItem('count',String(count))};try{parent.document.body.dataset.compromised='yes'}catch{}",
+ 'assets/pixel.svg':'<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>'
+};
+const fixtureServer=await startBrowserFixture(worker,env,{intercept:async request=>{const u=new URL(request.url);if(u.pathname.includes('/api/runs/')&&u.pathname.endsWith('/file')){const path=u.searchParams.get('path');return Response.json({path,html:path.endsWith('.html'),content:files[path]||''})}if(u.pathname.endsWith('/file-download'))return new Response(files[u.searchParams.get('path')]||'',{headers:{'Content-Type':'application/octet-stream'}});return null}}),base=fixtureServer.origin;
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']}),context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+
+try{
+ await page.goto(base);await page.locator('#password').fill('preview-test');await page.locator('#submit').click();await page.waitForURL(url=>url.origin===base&&url.pathname==='/');await page.locator('#quick-results').waitFor({state:'attached'});await page.evaluate(()=>previewResultFile({id:'run-one'},'index.html'));const frame=page.frameLocator('#result-preview');await frame.locator('#count').click({timeout:4000});assert.equal(await frame.locator('#count').textContent(),'1');await page.waitForTimeout(100);await page.locator('#close-modal').click();await page.evaluate(()=>previewResultFile({id:'run-one'},'index.html'));await frame.locator('#count').waitFor();assert.equal(await frame.locator('#count').textContent(),'1');assert.equal(await frame.locator('#count').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(12, 34, 56)');assert(await frame.locator('#image').evaluate(el=>el.complete&&el.naturalWidth>0));assert(!(await page.locator('#result-preview').getAttribute('sandbox')).includes('allow-same-origin'));assert.equal(await page.locator('body').getAttribute('data-compromised'),null);
+ await page.locator('#close-modal').click();await page.evaluate(()=>previewResultFile({id:'run-two'},'index.html'));await frame.locator('#count').waitFor();assert.equal(await frame.locator('#count').textContent(),'0');assert.deepEqual(errors,[]);console.log('PREVIEW QA PASSED: local CSS/JS/image, counter persistence across reopen, isolation between runs, opaque sandbox and no parent DOM access.');
+}finally{await browser.close();await fixtureServer.close()}

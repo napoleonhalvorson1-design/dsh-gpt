@@ -1,0 +1,10 @@
+{
+  "interface": {
+    "display_name": "OpenHands 五 AI 协作",
+    "short_description": "聊天安排五个 AI，手机查看交付与进度",
+    "default_prompt": "用 $openhands-collaboration 帮我安排五 AI 协作任务。"
+  },
+  "policy": {
+    "allow_implicit_invocation": true
+  }
+}
