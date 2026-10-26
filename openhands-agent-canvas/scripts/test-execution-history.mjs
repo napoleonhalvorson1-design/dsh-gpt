@@ -17,6 +17,7 @@ try{
  add('old-stage',{...node,conversationId:'old',modelUsage:null});assert.equal(executionHistory(store,team)[0].samples,4);
  add('failed-stage',{...node,status:'failed',outputReady:false,modelCompleted:false,conversationId:'failed',modelUsage:null},'failed');assert.equal(executionHistory(store,team)[0].failedBeforeDeliverySamples,1);
  add('interrupted',{...node,status:'paused',stopConfirmed:true,conversationId:'interrupted',modelUsage:null},'cancelled',{finishedAt:'2026-01-01T00:00:06Z'});const [censored]=executionHistory(store,team);assert.equal(censored.interruptedSamples,1);assert.equal(censored.observedWaitBeforeStopMsMedian,6000);assert.equal(censored.samples,4);
+ add('separate-role',{...node,phase:'verify',conversationId:'verify',modelUsage:{...node.modelUsage,requestId:'verify'}});assert.equal(executionHistory(store,team).find(g=>g.role==='verify').samples,1,'Planning, implementation and verification observations must not be mixed');
  assert.deepEqual(executionHistory(store,{}),[]);
  console.log('Passed bound verified-model observations, completed snapshot filtering, duplicate request exclusion, partial-run samples and unknown token preservation.');
 }finally{store.close();await rm(dir,{recursive:true,force:true})}
