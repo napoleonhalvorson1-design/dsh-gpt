@@ -24,6 +24,12 @@ jobs:
       - name: Check project configuration
         run: node --input-type=module -e 'import fs from "node:fs";const c=JSON.parse(fs.readFileSync(".openhands/canvas.json"));if(c.github.mergeApproval!=="codex-after-ci"||!c.github.requiredChecks.includes("canvas-ci"))process.exit(1)'
 
+      - name: Check real benchmark artifact contracts
+        run: |
+          node .openhands/benchmarks/artifacts/5.6/scripts/test-run-performance.mjs
+          node .openhands/benchmarks/artifacts/5.25-fixed/scripts/test-run-performance.mjs
+          node .openhands/benchmarks/real-development-contract.mjs .openhands/benchmarks/artifacts/5.6/shared/run-performance.mjs .openhands/benchmarks/artifacts/5.25-fixed/shared/run-performance.mjs
+
   engine-ci:
     name: engine-ci
     runs-on: ubuntu-latest
