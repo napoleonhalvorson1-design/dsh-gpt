@@ -49,8 +49,12 @@ export class Engine {
     const query=new URLSearchParams({limit:'100',sort_order:'TIMESTAMP'});if(node.cursor)query.set('page_id',node.cursor);else if(node.since)query.set('timestamp__gte',node.since);
     const path=(config.mode==='cloud'?'/api/v1/conversation/':'/api/conversations/')+node.handle.conversationId+'/events/search?'+query;
     const page=await upstream(config,path);
-    for(const raw of page.items||[]){if(raw.timestamp&&(!node.since||raw.timestamp>node.since))node.since=raw.timestamp;const event=eventSummary(raw,config);if(!event)continue;this.store.addEvent(run.id,node.id,event);if(event.output&&event.text&&!node.output.includes(event.text)){node.output=(node.output?node.output+'\n\n':'')+event.text;node.output=node.output.slice(-120000)}if(event.fatal)node.fatal=event.text}
-    node.cursor=page.next_page_id||null;this.store.saveRun(run);return !!node.cursor;
+    const next={...node};this.store.db.exec('BEGIN IMMEDIATE');
+    try{
+      for(const raw of page.items||[]){if(raw.timestamp&&(!next.since||raw.timestamp>next.since))next.since=raw.timestamp;const event=eventSummary(raw,config);if(!event)continue;this.store.addEvent(run.id,node.id,event);if(event.output&&event.text&&!next.output.includes(event.text)){next.output=(next.output?next.output+'\n\n':'')+event.text;next.output=next.output.slice(-120000)}if(event.fatal)next.fatal=event.text}
+      next.cursor=page.next_page_id||null;this.store.saveRun({...run,nodes:{...run.nodes,[node.id]:next}});this.store.db.exec('COMMIT');
+    }catch(error){this.store.db.exec('ROLLBACK');throw error}
+    Object.assign(node,next);return !!node.cursor;
   }
   async pauseBackend(run,node,config){
     let confirmations=0,lastRequest=0,attempts=0;

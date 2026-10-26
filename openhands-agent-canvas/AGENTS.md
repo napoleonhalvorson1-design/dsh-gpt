@@ -110,3 +110,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.20 / 插件 2.19：DeepSeek DSH v4 可用 runs trace 或 canvas_run_status view=trace/nodeId 做只读数字诊断；需受保护 profile.nativeTrace 的目录配置及原生 python3/zstd。验证本次回执、唯一原生会话与工作目录，只返回计数和时间；不传模型/思考/工具文本，不改运行状态。用量与工具区间均为已知下限，取消不算成功。最近同入口已验证模型的摘要可供最强负责人分工参考，重启后可重读。Flash/max 不变。见 docs/native-trace.md。
 
 5.21 / 插件 2.20：maxParallelNodes 只计本运行的准备/推理阶段，模型完成后保存快照的阶段不占推理名额；真正依赖继续等待已校验入桶的 outputReady。全局准备/推理仍最多 5，DAG 常驻调度最多 10、未结束阶段工作最多 10，保存积压会阻止新阶段继续派发。历史串行运行仍最多 3，与 DAG 共享全局执行名额。恢复查询不会让旧排队记录遮住已提交会话或另一类队列；activeNodeIds 仍包含正在保存的阶段。见 docs/scheduler-capacity.md，不把夹具吞吐当作真实模型整体 11 倍。
+
+5.22：DAG 与历史串行执行器以单个 SQLite 事务保存一页原生事件及对应节点输出/读取位置，网络请求在事务外。提交前退出重读整页，提交后退出输出与位置均可恢复。保留 FULL 持久化、事件去重、脱敏和最新兄弟节点合并。scripts/test-event-checkpoint.mjs 覆盖真实子进程退出及 WAL 恢复。配套插件 2.20 保持兼容。原生 events POST 没有客户端幂等 ID；不为尝试同会话修正而盲目重发不确定消息。
