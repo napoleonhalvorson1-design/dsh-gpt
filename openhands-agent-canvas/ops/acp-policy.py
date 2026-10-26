@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Session-scoped ACP model/effort bridge. Never writes CLI account configuration."""
-import argparse,asyncio,json,os,signal,sys,uuid,pathlib
+import argparse,asyncio,json,os,signal,sys,uuid,pathlib,time
 parser=argparse.ArgumentParser();parser.add_argument('--provider',required=True,choices=['codex','claude-code','deepseek']);parser.add_argument('--model',default='');parser.add_argument('--effort',default='');parser.add_argument('--request-id',default='');parser.add_argument('--catalog-output',default='');parser.add_argument('command',nargs=argparse.REMAINDER);args=parser.parse_args()
 command=args.command[1:] if args.command[:1]==['--'] else args.command
 if not command:raise SystemExit('ACP command is required')
@@ -28,7 +28,7 @@ async def main():
  if args.provider=='codex' and args.effort:
   config=json.loads(environment.get('CODEX_CONFIG','{}'));config['model_reasoning_effort']=args.effort;environment['CODEX_CONFIG']=json.dumps(config)
  child=await asyncio.create_subprocess_exec(*command,stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.DEVNULL,env=environment,start_new_session=True,limit=8*1024*1024)
- pending={};sessions={};waiters={};agent={};tasks=set();stopped=asyncio.Event();write_lock=asyncio.Lock()
+ pending={};sessions={};session_cwds={};prompt_contexts={};usage_totals={};waiters={};agent={};tasks=set();stopped=asyncio.Event();write_lock=asyncio.Lock()
  loop=asyncio.get_running_loop()
  for s in (signal.SIGTERM,signal.SIGINT):loop.add_signal_handler(s,stopped.set)
  async def child_write(message):
@@ -67,7 +67,9 @@ async def main():
    configured=True
    if cwd and args.model and args.effort:atomic_json(pathlib.Path(cwd)/'.canvas-collaboration'/'runtime-selection.json',{'schemaVersion':1,'requestId':args.request_id,'provider':args.provider,'requestedModel':args.model,'model':args.model,'effort':args.effort,'effortSource':source,'modelApplied':True,'effortApplied':True})
    if args.catalog_output:atomic_json(args.catalog_output,catalog(state,agent))
-   if sid:sessions[sid]=True
+   if sid:
+    sessions[sid]=True
+    if cwd:session_cwds[sid]=cwd
    reply['result']=state;parent_write(reply)
   except Exception as error:
    if sid:sessions[sid]=False
@@ -80,6 +82,23 @@ async def main():
    try:message=json.loads(line)
    except Exception:continue
    rid=message.get('id')
+   if rid in prompt_contexts and ('result' in message or 'error' in message):
+    sid,started=prompt_contexts.pop(rid);cwd=session_cwds.get(sid)
+    if cwd:
+     try:
+      keys=('totalTokens','inputTokens','cachedReadTokens','cachedWriteTokens','outputTokens','thoughtTokens')
+      result=message.get('result') if isinstance(message.get('result'),dict) else {}
+      reported=result.get('usage') if isinstance(result.get('usage'),dict) else {}
+      valid=lambda v:isinstance(v,int) and not isinstance(v,bool) and 0<=v<=9007199254740991
+      tokens={k:reported.get(k) if valid(reported.get(k)) else None for k in keys}
+      state=usage_totals.setdefault(sid,{'completedPrompts':0,'elapsedMs':0,'tokens':{k:0 for k in keys}})
+      state['completedPrompts']+=1;state['elapsedMs']+=round((time.monotonic()-started)*1000)
+      for k in keys:
+       a,b=state['tokens'][k],tokens[k];state['tokens'][k]=a+b if a is not None and b is not None and valid(a+b) else None
+      stop=result.get('stopReason')
+      stop=stop if stop in ('end_turn','max_tokens','max_turn_requests','refusal','cancelled') else 'error' if 'error' in message else 'unknown'
+      atomic_json(pathlib.Path(cwd)/'.canvas-collaboration'/'runtime-usage.json',{'schemaVersion':1,'requestId':args.request_id,'provider':args.provider,'model':args.model,'effort':args.effort,'scope':'acp-prompts-including-tools','stopReason':stop,**state})
+     except (OSError,ValueError,TypeError):pass
    if rid in waiters:
     if not waiters[rid].done():waiters[rid].set_result(message)
     continue
@@ -97,6 +116,7 @@ async def main():
    if method in ('session/new','session/load','session/resume'):pending[message.get('id')]=params
    if method=='session/prompt' and (args.model or args.effort) and not sessions.get(params.get('sessionId')):
     parent_write({'jsonrpc':'2.0','id':message.get('id'),'error':{'code':-32602,'message':'Model policy was not confirmed; inference blocked'}});continue
+   if method=='session/prompt' and session_cwds.get(params.get('sessionId')):prompt_contexts[message.get('id')]=(params['sessionId'],time.monotonic())
    if method in ('session/set_config_option','session/set_model') and args.provider=='deepseek':
     value=params.get('value',params.get('modelId'));target=args.effort if params.get('configId') in ('reasoning_effort','effort') else args.model
     if target and value!=target:parent_write({'jsonrpc':'2.0','id':message.get('id'),'error':{'code':-32602,'message':'DeepSeek is locked to V4.1 Flash / max'}});continue

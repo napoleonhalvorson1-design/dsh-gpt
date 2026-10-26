@@ -25,5 +25,10 @@ try{
  assert.equal(manifestWrites(),1,'Retry must not upload an already confirmed identical manifest');assert(cp.sha256);assert(store.objectInfo(cp.key));
  const before=uploads.length;await restarted.checkpoint(run,node,{mode:'remote'},{archivePath:path});assert.equal(uploads.length,before,'Completed barriers remain idempotent');
  await restarted.checkpoint(run,{...node,conversationId:'conversation-two'},{mode:'remote'},{archivePath:path});assert.equal(manifestWrites(),2,'A new model conversation invalidates prior part receipts');
+ const inputNode={...node,inputArchive:path,mergeReport:{parents:[],conflicts:[]}},inputKey='canvas/runs/input-run/inputs/build/handoff.json';
+ policy=key=>key.includes('/inputs/')&&key.endsWith('workspace.tar.gz')?failure(403):null;
+ await assert.rejects(()=>s.persistInput('input-run',inputNode));assert.equal(uploads.filter(u=>u.key===inputKey).length,1);
+ policy=()=>null;await restarted.persistInput('input-run',inputNode);assert.equal(uploads.filter(u=>u.key===inputKey).length,1,'Input retry must reuse its confirmed handoff receipt');
+ const inputCount=uploads.length;await restarted.persistInput('input-run',inputNode);assert.equal(uploads.length,inputCount,'Persisted input barriers are idempotent');
  console.log('Passed fresh-stream retry, denied-write fail-fast, durable partial upload receipts, restart reuse and conversation invalidation.');
 }finally{for(const s of storages)s.close();store.close();await rm(directory,{recursive:true,force:true})}
