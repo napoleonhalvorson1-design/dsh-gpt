@@ -1,13 +1,15 @@
 import {Engine as SerialEngine,ACTIVE,validateWorkflow} from './serial-engine.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {mkdir,stat,copyFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {join,basename} from 'node:path';
 import {ApiError,upstream,conversation,eventSummary,startConversation} from '../shared/openhands.mjs';
 import {transferWorkspace} from './handoff.mjs';
 import {captureNode,mergeArchives,validateMerge,archiveOperation} from './collaboration.mjs';
 import {chooseModel} from '../shared/model-policy.mjs';
 import {EventWakeup} from './event-wakeup.mjs';
 import {executionHistory} from './execution-history.mjs';
+import {budgetExpired,defaultPlannerPolicy,compileExecutionPolicy} from './execution-policy.mjs';
+import {recoverBudget} from './budget-recovery.mjs';
 import {validateAdaptiveSeed,planningInstructions,compileAdaptivePlan,compactHandoffs,validateDirectDelivery} from './adaptive.mjs';
 export {ACTIVE,validateWorkflow};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -19,7 +21,7 @@ function dependencies(flow){
  return Object.fromEntries(flow.nodes.filter(isAgent).map(n=>[n.id,[...new Set(nearest(n.id))]]));
 }
 export class Engine extends SerialEngine {
- constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.nodeActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false}
+ constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.nodeActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false;this.clock=options.clock||Date.now}
  close(){super.close();this.repositorySource?.close();for(const feed of this.eventWakeups.values())feed.close();this.eventWakeups.clear()}
  tick(){
   if(this.suppressTick||this.closed)return;
@@ -34,9 +36,9 @@ export class Engine extends SerialEngine {
  }
  enqueue(input,config){
   const existing=this.store.run(input.id);if(existing)return existing;
-  const flow=validateWorkflow(input.workflow);validateAdaptiveSeed(flow);if(flow.collaborationMode==='adaptive'&&!config.teamProfiles)throw new ApiError('自动协作尚未配置可用 AI 团队。',409);const deps=dependencies(flow),parallel=!!flow.repository&&config.mode==='remote'||!!flow.modelMode||!!config.selection||Object.values(config.nodeConfigs||{}).some(c=>c.selection)||flow.executionMode==='parallel'||Object.values(deps).filter(p=>!p.length).length>1||Object.values(deps).some(p=>p.length>1)||Object.keys(deps).some(id=>Object.values(deps).filter(p=>p.includes(id)).length>1);
+  const flow=validateWorkflow(input.workflow);validateAdaptiveSeed(flow);const plannerPolicy=defaultPlannerPolicy(flow,config,config.teamProfiles?executionHistory(this.store,config.teamProfiles):[]);if(plannerPolicy){const definition=flow.nodes.find(n=>n.id==='plan');definition.executionPolicy=plannerPolicy;config={...config,nodeConfigs:{...config.nodeConfigs,plan:compileExecutionPolicy({...config.nodeConfigs.plan},definition,flow,config.teamProfiles)}};}if(flow.collaborationMode==='adaptive'&&!config.teamProfiles)throw new ApiError('自动协作尚未配置可用 AI 团队。',409);const deps=dependencies(flow),parallel=flow.nodes.some(n=>n.executionPolicy)||!!flow.repository&&config.mode==='remote'||!!flow.modelMode||!!config.selection||Object.values(config.nodeConfigs||{}).some(c=>c.selection)||flow.executionMode==='parallel'||Object.values(deps).filter(p=>!p.length).length>1||Object.values(deps).some(p=>p.length>1)||Object.keys(deps).some(id=>Object.values(deps).filter(p=>p.includes(id)).length>1);
   if(parallel&&flow.nodes.filter(isAgent).some(n=>(config.nodeConfigs?.[n.id]||config).mode!=='remote'))throw new ApiError('并行文件协作需要自托管 OpenHands 执行入口。',409);
-  this.suppressTick=true;let run;try{run=super.enqueue(input,config)}finally{this.suppressTick=false}
+  this.suppressTick=true;let run;try{run=super.enqueue({...input,workflow:flow},config)}finally{this.suppressTick=false}
   if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive')run.adaptivePlan={status:'pending',plannerId:'plan'};run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
   this.tick();return this.store.run(run.id);
  }
@@ -54,7 +56,7 @@ export class Engine extends SerialEngine {
   const run=super.stop(id);if(run.schedulerVersion===2&&run.status==='stopping')this.tick();return run;
  }
  async resume(id,config){
-  const saved=this.store.config(id);if(saved?.nodeConfigs&&config?.nodeConfigs)for(const [key,c] of Object.entries(config.nodeConfigs))if(saved.nodeConfigs[key]?.selection)c.selection=structuredClone(saved.nodeConfigs[key].selection);
+  const saved=this.store.config(id);if(saved?.nodeConfigs&&config?.nodeConfigs)for(const [key,c] of Object.entries(config.nodeConfigs))if(saved.nodeConfigs[key]){const old=saved.nodeConfigs[key];if(old.selection)c.selection=structuredClone(old.selection);for(const field of ['policyRuntimePath','executionPolicy','fallbackConfig'])if(old[field]!==undefined)c[field]=structuredClone(old[field]);}
   let run=this.store.run(id);if(!run||run.schedulerVersion!==2)return super.resume(id,config);
   if(ACTIVE.has(run.status))return run;if(run.status==='succeeded')throw new ApiError('此工作流已完成，请创建新的运行。',409);
   const old=this.store.config(id);for(const node of Object.values(run.nodes)){const a=old.nodeConfigs?.[node.id]||old,b=config.nodeConfigs?.[node.id]||config;if(a.baseUrl!==b.baseUrl)throw new ApiError('请连接此任务原来的后端后再重试。',409)}
@@ -62,11 +64,12 @@ export class Engine extends SerialEngine {
   for(const node of Object.values(run.nodes)){
    if(node.outputReady)continue;
    if(node.status==='succeeded'&&node.modelCompleted){node.error=null;continue}
+   if(node.budgetRecovery?.state==='storage-blocked'){node.budgetRecovery.state='stopping';node.status='pending';node.error=null;node.resumeRequested=false;continue}
    if(node.status==='failed'){
     const c=config.nodeConfigs?.[node.id]||config;let info;try{info=await conversation(c,node.handle?.conversationId||node.conversationId)}catch(e){if(e.status!==404)throw e}
     if(!info||['finished','error','stuck'].includes(info.execution_status)){node.conversationId=randomUUID();node.handle=null;node.output='';node.cursor=null;node.since=null;node.fatal=null;node.modelCompleted=false;node.snapshotReady=false;node.checkpoint=null;node.submittedAt=null;node.finishedAt=null;node.planningRejected=false;node.modelUsage=null;node.selectionApplied=false;node.reasoningEffortUsed=null}
    }
-   node.resumeRequested=true;node.status='pending';node.error=null;node.stopConfirmed=false;
+   if(node.budgetRecovery?.state==='exhausted'){node.budgetRecovery=null;node.budgetStartedAt=new Date().toISOString();}node.resumeRequested=true;node.status='pending';node.error=null;node.stopConfirmed=false;
   }
   if(this.closed)return run;this.store.setConfig(id,config);run.error=null;run.cancelRequested=false;run.status='queued';run.finishedAt=null;this.store.saveRun(run,{resetCancel:true});this.log(id,'workflow','已恢复未完成分支；成功分支与文件快照保留，不会重复调用。');this.tick();return this.store.run(id);
  }
@@ -89,14 +92,14 @@ export class Engine extends SerialEngine {
     if(run.adaptivePlan?.status==='pending'&&this.ready(run.nodes.plan)){await this.expandPlan(id);run=this.store.run(id)}
     for(const nodeId of run.order){
      run=this.store.run(id);const node=run.nodes[nodeId];if(run.cancelRequested)break;
-     if(tasks.has(nodeId)||this.ready(node)||['failed','paused'].includes(node.status)||node.error)continue;
+     if(tasks.has(nodeId)||this.ready(node)||node.budgetRecovery?.state!=='stopping'&&(['failed','paused'].includes(node.status)||node.error))continue;
      if(tasks.size>=run.maxParallelNodes)break;
      if(!node.modelCompleted&&this.nodeActive.size>=this.maxNodeActive&&!this.nodeActive.has(id+'/'+nodeId))continue;
      if(!(node.dependencies||[]).every(p=>this.ready(run.nodes[p])))continue;
      this.launch(id,node,tasks,false);
     }
     if(!tasks.size){
-     run=this.store.run(id);const values=Object.values(run.nodes),failed=values.filter(n=>n.status==='failed'||n.error),paused=values.filter(n=>n.status==='paused');
+     run=this.store.run(id);const values=Object.values(run.nodes),failed=values.filter(n=>n.budgetRecovery?.state!=='stopping'&&(n.status==='failed'||n.error)),paused=values.filter(n=>n.status==='paused'&&n.budgetRecovery?.state!=='stopping');
      if(values.every(n=>this.ready(n))){await this.finalizeDag(run);return}
      if(failed.length){this.patch(id,r=>{r.status='failed';r.error=failed.map(n=>n.name+'：'+(n.error||'执行失败')).join('\n');r.activeNodeIds=[]});return}
      if(paused.length){this.patch(id,r=>{r.status='awaiting_input';r.error='分支等待后端确认或补充输入，处理后可继续。';r.activeNodeIds=[]});return}
@@ -143,11 +146,12 @@ export class Engine extends SerialEngine {
   const archives=await Promise.all(parents.map(async parent=>({id:parent.id,archive:await this.archiveFor(run,parent)}))),base=baseId?(archives.find(p=>p.id===baseId)?.archive||await this.archiveFor(run,run.nodes[baseId])):undefined;
   const describe=p=>({id:p.id,name:p.name,profileId:p.profileId,server:p.server,model:p.modelUsed,conversationId:p.conversationId,submittedAt:p.submittedAt,finishedAt:p.finishedAt,checkpoint:p.checkpoint||null});
   const sources=parents.map(describe),lineage=run.order.filter(id=>sets.some(s=>s.has(id))).map(id=>describe(run.nodes[id]));
-  return mergeArchives({runId:run.id,nodeId:node.id,directory:this.handoffDirectory,parents:archives,base:base||repository?.path,baseId:baseId||(repository?'repository':undefined),sources,lineage,repository:repository?.metadata||run.repositorySource,scheduler:{version:run.schedulerVersion,maxParallelNodes:run.maxParallelNodes}});
+  return mergeArchives({runId:run.id,nodeId:node.id,directory:this.handoffDirectory,cacheKey:node.fallbackCount?node.id+'-attempt-'+(node.fallbackCount+1):node.id,parents:archives,base:base||repository?.path,baseId:baseId||(repository?'repository':undefined),sources,lineage,repository:repository?.metadata||run.repositorySource,scheduler:{version:run.schedulerVersion,maxParallelNodes:run.maxParallelNodes}});
  }
  async executeNode(id,nodeId){
   let run=this.store.run(id),node={...run.nodes[nodeId]},bundle=this.store.config(id),config=bundle.nodeConfigs?.[nodeId]||bundle;
   if(this.closed)return;if(run.cancelRequested)return this.stopNode(id,node);
+  if(node.budgetRecovery?.state==='stopping')return recoverBudget(this,id,node,config);
   if(node.status==='succeeded'&&node.modelCompleted)return this.persistDagStage(id,node,config);
   node.status='running';this.patchNode(id,node);
   if(!node.workspaceReady){await upstream(config,'/api/file/create_directory?'+new URLSearchParams({path:node.workspace}),{method:'POST',allowEmpty:true});if(this.closed)return;node.workspaceReady=true;this.patchNode(id,node)}
@@ -159,7 +163,7 @@ export class Engine extends SerialEngine {
     if(!node.inputReady){
      const input=await this.inputFor(this.store.run(id),node);if(this.closed)return;node.mergeReport=input.report;
      this.log(id,node.id,'正在从各上游快照汇合文件（'+node.dependencies.length+' 个依赖）。');
-     node.handoffMetrics=await transferWorkspace({runId:id,nodeId:node.id,source:config,target:config,sourceWorkspace:node.workspace+'/input-source',targetWorkspace:node.workspace,directory:this.handoffDirectory,sourceArchive:input.path,targetRoot:node.id});
+     node.handoffMetrics=await transferWorkspace({runId:id,nodeId:node.id,source:config,target:config,sourceWorkspace:node.workspace+'/input-source',targetWorkspace:node.workspace,directory:this.handoffDirectory,sourceArchive:input.path,targetRoot:basename(node.workspace)});
      if(this.closed)return;node.inputReady=true;node.inputReadyAt=new Date().toISOString();node.inputArchive=input.path;
      node.inputPersistenceVersion=1;node.inputStored=!this.storage?.config().enabled;
      if(this.closed)return;this.patchNode(id,node);this.saveInput(id,node);
@@ -196,8 +200,9 @@ export class Engine extends SerialEngine {
     }
     if(['error','stuck'].includes(info.execution_status))throw new ApiError(node.output||'智能体执行失败：'+info.execution_status,400);
     if(['waiting_for_confirmation','paused'].includes(info.execution_status)){node.status='paused';node.error=null;this.patchNode(id,node);this.log(id,node.id,'此分支等待后端确认，其他分支继续运行。');return}
-    reconnects=0;node.status='running';node.error=null;this.patchNode(id,node);await feed.wait(eventVersion,this.pollMs);
-   }catch(error){if(error.status>=500&&reconnects++<12&&!node.modelCompleted){node.status='reconnecting';node.error=null;this.patchNode(id,node);if(reconnects===1)this.log(id,node.id,'此分支连接暂时中断，其他分支继续执行，服务器自动重连。');await sleep(Math.min(15000,2000*reconnects));continue}throw error}
+    if(budgetExpired(node,config,this.clock()))return recoverBudget(this,id,node,config);
+    reconnects=0;node.status='running';node.error=null;this.patchNode(id,node);const remaining=config.executionPolicy?Math.max(20,config.executionPolicy.budgetSeconds*1000-(this.clock()-Date.parse(node.budgetStartedAt||node.submittedAt))):this.pollMs;await feed.wait(eventVersion,Math.min(this.pollMs,remaining));
+   }catch(error){if(error.status>=500&&!node.modelCompleted&&budgetExpired(node,config,this.clock()))return recoverBudget(this,id,node,config);if(error.status>=500&&reconnects++<12&&!node.modelCompleted){node.status='reconnecting';node.error=null;this.patchNode(id,node);if(reconnects===1)this.log(id,node.id,'此分支连接暂时中断，其他分支继续执行，服务器自动重连。');await sleep(Math.min(15000,2000*reconnects));continue}throw error}
   }}finally{feed.close();this.eventWakeups.delete(feedKey)}
  }
  async pullDagEvents(id,node,config){
@@ -208,8 +213,8 @@ export class Engine extends SerialEngine {
  }
  saveInput(id,node){
   if(node.inputPersistenceVersion!==1||node.inputStored||!this.storage?.config().enabled)return Promise.resolve({ok:true});
-  const key=id+'/'+node.id;if(this.inputTasks.has(key))return this.inputTasks.get(key);
-  const promise=(async()=>{try{await this.storage.persistInput(id,node);node.inputStored=true;node.inputStorageError=null;if(!this.closed)this.patchNode(id,{id:node.id,inputStored:true,inputStorageError:null});return {ok:true}}catch{const message='输入快照尚未完整写入数据桶，请继续以重试存储；已完成的 AI 保留。';node.inputStorageError=message;if(!this.closed)this.patchNode(id,{id:node.id,inputStorageError:message});return {ok:false,error:new ApiError(message,502)}}finally{this.inputTasks.delete(key)}})();this.inputTasks.set(key,promise);return promise;
+  const key=id+'/'+node.id+'/'+node.conversationId;if(this.inputTasks.has(key))return this.inputTasks.get(key);
+  const promise=(async()=>{try{await this.storage.persistInput(id,node);node.inputStored=true;node.inputStorageError=null;if(!this.closed&&this.store.run(id)?.nodes[node.id]?.conversationId===node.conversationId)this.patchNode(id,{id:node.id,inputStored:true,inputStorageError:null});return {ok:true}}catch{const message='输入快照尚未完整写入数据桶，请继续以重试存储；已完成的 AI 保留。';node.inputStorageError=message;if(!this.closed&&this.store.run(id)?.nodes[node.id]?.conversationId===node.conversationId)this.patchNode(id,{id:node.id,inputStorageError:message});return {ok:false,error:new ApiError(message,502)}}finally{this.inputTasks.delete(key)}})();this.inputTasks.set(key,promise);return promise;
  }
  async persistDagStage(id,node,config,archive){
   const run=this.store.run(id),inputStored=await this.saveInput(id,node);if(!inputStored.ok)throw inputStored.error;
@@ -237,7 +242,7 @@ export class Engine extends SerialEngine {
   while(!this.closed){try{
    if(Date.now()-lastRequest>Math.max(50,Math.min(5000,this.pollMs*2))){try{await upstream(config,'/api/conversations/'+node.handle.conversationId+'/interrupt',{method:'POST',allowEmpty:true})}catch(e){if(![404,405].includes(e.status))throw e;await upstream(config,'/api/conversations/'+node.handle.conversationId+'/pause',{method:'POST',allowEmpty:true})}lastRequest=Date.now()}
    const info=await conversation(config,node.handle.conversationId);confirmations=['paused','finished','error','stuck','idle'].includes(info.execution_status)?confirmations+1:0;
-   if(confirmations>=2){this.patchNode(id,{id:node.id,status:'paused',error:null,stopConfirmed:true});this.log(id,node.id,'此分支已确认停止。');return}
+   if(confirmations>=2){this.patchNode(id,{id:node.id,status:'paused',error:null,stopConfirmed:true});this.log(id,node.id,'此分支已确认停止。');return {executionStatus:info.execution_status}}
   }catch{confirmations=0;if(attempts===0)this.log(id,node.id,'此分支停止尚未确认，将继续重试。')}
   attempts++;await sleep(Math.max(50,Math.min(1000,this.pollMs)))}
  }

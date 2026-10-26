@@ -82,7 +82,11 @@ export function analyzeRun(run, { now } = {}) {
       else warn(id, 'unknown_dependencies', 'queueMs');
     } else warn(id, 'unknown_dependencies', 'queueMs');
     const queueMs = duration(ready, times[0], id, 'queueMs');
-    const preparationMs = segment(0, 1, 'preparationMs');
+    const attemptStart = node.attemptStartedAt === undefined ? times[0] : read(node.attemptStartedAt, id, 'attemptStartedAt');
+    const attemptStartValid = attemptStart !== null && (times[0] === null || attemptStart >= times[0]) && (times[1] === null || attemptStart <= times[1]);
+    if (node.attemptStartedAt !== undefined && !attemptStartValid) warn(id, 'invalid_attempt_order', 'attemptStartedAt');
+    const preparationMs = !attemptStartValid ? null : node.attemptStartedAt === undefined ? segment(0, 1, 'preparationMs')
+      : duration(attemptStart, times[1] ?? (canObserve && last === 0 ? clock : null), id, 'preparationMs');
     const submissionWaitMs = segment(1, 2, 'submissionWaitMs');
     const modelMs = segment(2, 3, 'modelMs');
     const snapshotMs = segment(3, 4, 'snapshotMs');
@@ -90,6 +94,23 @@ export function analyzeRun(run, { now } = {}) {
     const modelEnd = times[3] ?? (node.finishedAt == null && canObserve && last === 2 ? clock : null);
     if (modelMs !== null) intervals.push([times[2], modelEnd]);
     else modelIntervalsComplete = false;
+    const previousAttempts = [];
+    let previousAttemptWorkMs = 0, attemptsKnown = true, previousStop = null;
+    if (node.attempts !== undefined && !Array.isArray(node.attempts)) { attemptsKnown = false; warn(id, 'invalid_attempts', 'attempts'); }
+    for (const [index, attempt] of (Array.isArray(node.attempts) ? node.attempts : []).entries()) {
+      const a = attempt && typeof attempt === 'object' ? attempt : {};
+      const start = read(a.submittedAt, id, `attempts[${index}].submittedAt`);
+      const stop = read(a.finishedAt ?? (a.stopConfirmed === true ? a.stoppedAt : undefined), id, `attempts[${index}].endedAt`);
+      let ms = duration(start, stop, id, `attempts[${index}].modelMs`);
+      if (ms !== null && (created !== null && start < created || ended !== null && stop > ended
+        || previousStop !== null && start < previousStop || attemptStart !== null && stop > attemptStart)) {
+        warn(id, 'invalid_attempt_order', `attempts[${index}]`); ms = null;
+      }
+      if (ms === null) attemptsKnown = false;
+      else { intervals.push([start, stop]); previousAttemptWorkMs += ms; previousStop = stop; }
+      previousAttempts.push({ index, modelMs: ms, interrupted: !a.finishedAt && a.stopConfirmed === true });
+    }
+    if (!attemptsKnown) modelIntervalsComplete = false;
     let end = times[5];
     let endField = 'outputReadyAt';
     let endToEndComplete = end !== null;
@@ -106,10 +127,11 @@ export function analyzeRun(run, { now } = {}) {
     if (activeNode && times.some(t => t !== null && t > clock)) {
       warn(id, 'future_time', 'now');
     }
-    const complete = chronological && times.every(t => t !== null) && queueMs !== null
+    const complete = attemptsKnown && preparationMs !== null && chronological && times.every(t => t !== null) && queueMs !== null
       && created !== null && ended !== null && times.every(t => t >= created && t <= ended);
     if (!complete) allComplete = false;
     return { id, queueMs, preparationMs, submissionWaitMs, modelMs, snapshotMs, barrierMs,
+      ...(previousAttempts.length ? { previousAttempts, previousAttemptWorkMs: attemptsKnown ? previousAttemptWorkMs : null } : {}),
       endToEndMs, endToEndEndField: end === null ? null : endField, endToEndComplete: endToEndComplete && endToEndMs !== null,
       timingComplete: complete };
   });

@@ -13,6 +13,18 @@ assert.equal(parallel.overall.modelRatio, 0.8);
 assert.equal(parallel.overall.overheadRatio, 0.2);
 assert.equal(parallel.nodes[0].queueMs, 10);
 assert.equal(parallel.slowestNode.id, 'a');
+const recovered = analyzeRun(run({ a: node(0, 90, { attemptStartedAt: 50, inputReadyAt: 55,
+  submittedAt: 60, attempts: [{ submittedAt: 10, stoppedAt: 40, stopConfirmed: true }] }) }));
+assert.equal(recovered.nodes[0].preparationMs, 5);
+assert.equal(recovered.nodes[0].endToEndMs, 90);
+assert.equal(recovered.nodes[0].previousAttemptWorkMs, 30);
+assert.equal(recovered.modelWallMs, 60);
+assert.equal(recovered.modelWorkMs, 60);
+assert.equal(recovered.overall.modelRatio, 0.6);
+const unknownAttempt = analyzeRun(run({ a: node(0, 90, { attemptStartedAt: 50,
+  inputReadyAt: 55, submittedAt: 60, attempts: [{ submittedAt: 10 }] }) }));
+assert.equal(unknownAttempt.modelIntervalsComplete, false);
+assert.equal(unknownAttempt.overall.modelRatio, null);
 const touching = analyzeRun(run({ a: node(0, 50), b: node(50, 100) }));
 assert.equal(touching.observedPeakModels, 1);
 
