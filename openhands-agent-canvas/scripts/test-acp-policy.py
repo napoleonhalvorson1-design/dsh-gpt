@@ -21,9 +21,9 @@ for line in sys.stdin:
  print(json.dumps({'jsonrpc':'2.0','id':m['id'],'result':result}),flush=True)
 '''
 class Policy(unittest.TestCase):
- def run_case(self,provider='codex',mode='normal'):
+ def run_case(self,provider='codex',mode='normal',context='inherit'):
   folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup);root=pathlib.Path(folder.name);fake=root/'fake.py';fake.write_text(FAKE)
-  env={**os.environ,'CODEX_CONFIG':json.dumps({'preserved':'yes'})};p=subprocess.Popen([sys.executable,str(ROOT/'ops/acp-policy.py'),'--provider',provider,'--model','target','--effort','max','--request-id','run-123','--',sys.executable,str(fake),mode],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
+  env={**os.environ,'CODEX_CONFIG':json.dumps({'preserved':'yes'})};p=subprocess.Popen([sys.executable,str(ROOT/'ops/acp-policy.py'),'--provider',provider,'--model','target','--effort','max','--request-id','run-123','--context',context,'--',sys.executable,str(fake),mode],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
   def cleanup():
    p.stdin.close()
    try:p.wait(timeout=5)
@@ -50,6 +50,11 @@ class Policy(unittest.TestCase):
   root,call,reply=self.run_case(mode='unsupported');call('session/prompt',{'sessionId':'s'});r=json.loads((root/'.canvas-collaboration/runtime-usage.json').read_text());self.assertTrue(all(v is None for v in r['tokens'].values()))
  def test_optional_usage_write_failure_does_not_block(self):
   root,call,reply=self.run_case();(root/'.canvas-collaboration/runtime-usage.json').mkdir();self.assertEqual(call('session/prompt',{'sessionId':'s'})['result']['stopReason'],'end_turn')
+ def test_focused_context_is_process_scoped(self):
+  root,call,reply=self.run_case(context='focused');self.assertIn('result',reply);c=json.loads(call('session/prompt',{'sessionId':'s'})['result']['environment']['CODEX_CONFIG']);self.assertEqual(c['preserved'],'yes');self.assertEqual(c['model_reasoning_effort'],'max');self.assertEqual(c['skills.max_context_tokens'],1024)
+  for k in ['apps','plugins','remote_plugin']:self.assertIs(c['features.'+k],False)
+  self.assertNotIn('approval_policy',c);self.assertNotIn('sandbox_mode',c);self.assertNotIn('base_instructions',c)
+  root,call,reply=self.run_case();c=json.loads(call('session/prompt',{'sessionId':'s'})['result']['environment']['CODEX_CONFIG']);self.assertNotIn('features.apps',c);self.assertNotIn('skills.max_context_tokens',c)
  def test_process_overrides(self):
   for provider in ['codex','claude-code']:
    with self.subTest(provider=provider):

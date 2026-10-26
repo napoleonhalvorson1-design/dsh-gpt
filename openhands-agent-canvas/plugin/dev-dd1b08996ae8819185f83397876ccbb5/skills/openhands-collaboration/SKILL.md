@@ -105,3 +105,9 @@ DeepSeek 在任何模式及手动覆盖下均固定 **DeepSeek V4.1 Flash + max*
 负责人可为阶段设置 executionPolicy={budgetSeconds:300,fallbackProfile:"入口ID",fallbackModelPolicy:{model:"已验证ID",effort:"支持深度"}}，预算为 30–7200 秒，长任务给足时间。原会话确认停止后最多自动切换一次，从相同上游快照的新目录执行，保留原目录；恰好完成则优先交付原成果，用户取消后不切换。手动选择与 DeepSeek Flash/max 锁优先，所有备用须已验证。
 
 新 strongest 规划默认 300 秒及同模型同深度的跨入口后备，三个匹配规划观测可将预算延长至最多 900 秒；显式节点策略优先。其他阶段由负责人按需求决定。不配置备用时到期确认停止并等待明确继续。budgetRecovery、fallbackCount、attempts 给出实际恢复状态；stopping 不代表已停止。存储失败只重试存储，已完成 AI 不再调用。一次备用耗尽后由明确的继续请求恢复当前暂停会话，不能自动循环换入口。耗时保留旧尝试和全部等待，不能只统计成功备用来声称整体 11 倍。
+
+## 按职责选择上下文（5.14 / 插件 2.13）
+
+先查 profiles 的 executionFeatures.runtimeContextModes。负责人可为纯文件、终端开发阶段写 runtimeContext="focused"；需要 App、插件或相关技能的阶段使用 inherit，不确定时继承，不能为省上下文降低任务能力。只有配置探针确认的 Codex 入口支持 focused；DeepSeek、Claude 继续原环境。项目显式 runtimeContext 优先于 AI 阶段提议，preset 输入也保留它，未设置和历史运行不变。
+
+focused 限该次 Codex ACP 子进程的 App、插件及技能目录，保留模型、思考深度、原生文件/终端、账号和托管要求；需要外部能力时选择 inherit。配置不写入用户全局文件，不重启共享手机 Codex 服务。模式随运行冻结，备用和续跑保留相应配置；runtimeContextRequested 只说明请求设置，不能据此宣称实际模型 token 已下降或整体快 11 倍。
