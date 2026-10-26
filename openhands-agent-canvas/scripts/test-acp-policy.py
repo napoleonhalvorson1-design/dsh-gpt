@@ -16,7 +16,8 @@ for line in sys.stdin:
   if p['configId']=='model':model=p['value'] if mode!='mismatch' else 'original'
   else:effort=p['value']
   result=state()
- elif method=='session/prompt':result={'stopReason':'end_turn','environment':{k:os.environ.get(k) for k in ['CLAUDE_CODE_EFFORT_LEVEL','CODEX_CONFIG']}}
+ elif method=='session/prompt':result={'stopReason':'end_turn','usage':{'totalTokens':100,'inputTokens':30,'cachedReadTokens':50,'outputTokens':20,'thoughtTokens':'private-secret'},'environment':{k:os.environ.get(k) for k in ['CLAUDE_CODE_EFFORT_LEVEL','CODEX_CONFIG']}}
+ if method=='session/prompt' and mode=='unsupported':result.pop('usage',None)
  print(json.dumps({'jsonrpc':'2.0','id':m['id'],'result':result}),flush=True)
 '''
 class Policy(unittest.TestCase):
@@ -39,8 +40,16 @@ class Policy(unittest.TestCase):
   for mode in ['reject','mismatch']:
    with self.subTest(mode=mode):
     root,call,reply=self.run_case(mode=mode);self.assertIn('error',reply);self.assertNotIn('private provider error',json.dumps(reply));self.assertIn('error',call('session/prompt',{'sessionId':'s'}));self.assertFalse((root/'.canvas-collaboration/runtime-selection.json').exists())
+ def test_usage_is_written_before_prompt_reply(self):
+  root,call,reply=self.run_case();call('session/prompt',{'sessionId':'s'})
+  p=root/'.canvas-collaboration/runtime-usage.json';u=json.loads(p.read_text());self.assertEqual(u['requestId'],'run-123');self.assertEqual(u['tokens']['outputTokens'],20);self.assertIsNone(u['tokens']['thoughtTokens']);self.assertNotIn('private-secret',p.read_text());self.assertEqual(u['completedPrompts'],1);self.assertEqual(p.stat().st_mode & 0o777,0o600)
+  call('session/prompt',{'sessionId':'s'});u=json.loads(p.read_text());self.assertEqual(u['tokens']['totalTokens'],200);self.assertEqual(u['tokens']['cachedReadTokens'],100);self.assertEqual(u['completedPrompts'],2);self.assertGreaterEqual(u['elapsedMs'],0)
  def test_deepseek_pinned(self):
   root,call,reply=self.run_case(provider='deepseek');self.assertIn('result',reply);self.assertIn('error',call('session/set_config_option',{'sessionId':'s','configId':'model','value':'original'}));self.assertIn('error',call('session/set_config_option',{'sessionId':'s','configId':'reasoning_effort','value':'low'}))
+ def test_unknown_usage_is_not_zero(self):
+  root,call,reply=self.run_case(mode='unsupported');call('session/prompt',{'sessionId':'s'});r=json.loads((root/'.canvas-collaboration/runtime-usage.json').read_text());self.assertTrue(all(v is None for v in r['tokens'].values()))
+ def test_optional_usage_write_failure_does_not_block(self):
+  root,call,reply=self.run_case();(root/'.canvas-collaboration/runtime-usage.json').mkdir();self.assertEqual(call('session/prompt',{'sessionId':'s'})['result']['stopReason'],'end_turn')
  def test_process_overrides(self):
   for provider in ['codex','claude-code']:
    with self.subTest(provider=provider):

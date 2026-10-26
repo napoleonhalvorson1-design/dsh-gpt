@@ -90,3 +90,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 归档保留脚本执行位（规范化为 644/755，原生隔离目录写为 600/700），整包回执也检查执行位。helper 以内容哈希命名，保留旧 helper 供冻结的旧运行使用；升级通过 ops/install-fast-handoff.mjs，保持原配置权限和账户。GitHub commit_files 的 mode 可为 100644/100755；修改脚本保留原执行位。执行分支直接实现职责，新增协作由本次 plan.json 交给引擎派发，避免在导入源码的 AGENTS 指南中再次启动工作流。
 
 5.11：用 `canvas runs performance --id ID` 或 `canvas_run_status` 的 view=performance 读取无模型输出的耗时摘要，历史缺失值为 null。真实对比使用 `scripts/benchmark-real-development.mjs`，必须显式 --allow-real-models；它调用实际模型和桶，不能用于常规升级检查。固定需求、源版本与模型目录，记录失败和恢复；单次成功不能证明整体快 11 倍。S3 文件上传只对临时错误用新流重试一次；阶段归档和清单的独立成功回执跨重启保留，两个都成功才交付。
+
+5.12：规划只写文件职责与必要接口，完整任务由引擎附带。server/execution-history.mjs 汇总最近 50 个运行中已入桶、已确认模型的成功阶段，以及单列的失败次数和已确认停止前等待；停止未交付不混入成功样本。耗时包括模型启动和工具，任务不同，不能宣称模型能力排名。ACP 标准 prompt-result usage 保存为 runtime-usage.json，只含数字用量；缺失保持 null，无效遥测不阻断交付。输入快照也保存独立成功回执并用新流重试。ops/install-execution-policy.mjs 在三个服务校验新脚本后原子更新受保护 profiles.json 的 policyRuntimePath（内容哈希路径），保留属主、组、权限和旧脚本；不改登录，不调用模型。

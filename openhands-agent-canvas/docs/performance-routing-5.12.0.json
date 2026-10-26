@@ -1,0 +1,76 @@
+{
+  "completeGoal": false,
+  "goalSpeedFactor": 11,
+  "scope": "Actual routing pilot and real S3 request profiling, without a claimed general speedup",
+  "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+  "routingPilot": {
+    "websiteVersion": "5.11.0",
+    "runId": "engine-performance-fastplan-20261027-r1",
+    "status": "cancelled",
+    "createdAt": "2026-10-26T18:44:31.680Z",
+    "finishedAt": "2026-10-26T18:58:59.384Z",
+    "elapsedUntilStopMs": 867704,
+    "plan": {
+      "profileId": "codex-silicon",
+      "model": "gpt-6-astra",
+      "effort": "medium",
+      "elapsedMs": 63764
+    },
+    "implementation": {
+      "profileId": "deepseek-shanghai",
+      "model": "[\"deepseek-official\",\"deepseek-flash\"]",
+      "effort": "max",
+      "submittedAt": "2026-10-26T18:46:49.858Z",
+      "finishedAt": null,
+      "stopConfirmed": true,
+      "observedWaitBeforeStopMs": 729526
+    },
+    "delivered": false,
+    "successfulSpeedFactor": null,
+    "storageRecovery": {
+      "inputUploadFailed": true,
+      "continuedWithoutNewPlannerInference": true
+    },
+    "limitations": [
+      "Stopped by the operator after exceeding the old whole-task elapsed time; not a successful fast run.",
+      "Includes real storage failure, manual recovery and service latency variation.",
+      "A single interrupted task does not establish a model quality or speed ranking."
+    ]
+  },
+  "storageIO": {
+    "payloadBytes": 7261,
+    "http1": {
+      "getMs": 1011,
+      "putMs": 18624,
+      "httpStatus": 200
+    },
+    "defaultHttp2": {
+      "getHttpStatus": 400,
+      "adopted": false
+    },
+    "experimentalHttp2HostMapping": {
+      "putMs": 13572,
+      "readbackSha256Verified": true,
+      "adopted": false
+    },
+    "limitations": [
+      "Single samples, uncontrolled service timing; insufficient evidence to switch production transport.",
+      "I/O samples do not prove whole-task 11x speed."
+    ]
+  },
+  "implementation": {
+    "version": "5.12.0",
+    "changes": [
+      "Bound per-request token receipts without prompts or reasoning text",
+      "Recent verified stage timing, failure and interrupted-wait observations for the strongest planner",
+      "Compact per-stage instructions, with full original task attached automatically",
+      "Fresh-stream retries and independent part receipts for input snapshots",
+      "Immutable policy script paths preserve frozen old run configurations"
+    ]
+  },
+  "sources": [
+    "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-signing-elements.html",
+    "https://github.com/aws/aws-sdk-js-v3/blob/main/supplemental-docs/performance/parallel-workloads-node-js.md",
+    "https://learn.chatgpt.com/docs/config-file/config-reference"
+  ]
+}

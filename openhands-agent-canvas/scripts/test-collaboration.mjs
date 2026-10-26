@@ -45,6 +45,9 @@ async function waitFor(predicate,message){
 }
 
 try{
+ const selection={requestId:'request-one',model:'strong',effort:'medium'},receipt={...selection,modelApplied:true,effortApplied:true},usage={schemaVersion:1,...selection,scope:'acp-prompts-including-tools',completedPrompts:1,elapsedMs:2000,stopReason:'end_turn',tokens:{outputTokens:100,inputTokens:'private-secret'},privateField:'private-secret'};
+ const telemetry=await archive({'.canvas-collaboration/runtime-selection.json':JSON.stringify(receipt),'.canvas-collaboration/runtime-usage.json':JSON.stringify(usage)}),usageValidation=await validateMerge(telemetry,'run',{selection});check(usageValidation.modelUsage.tokens.outputTokens===100,'Bound token usage is returned from verified snapshot');check(usageValidation.modelUsage.tokens.inputTokens===null&&!JSON.stringify(usageValidation).includes('private-secret'),'Telemetry returns only valid numeric whitelist fields');
+ for(const text of ['{bad',JSON.stringify({...usage,requestId:'wrong'}),JSON.stringify({...usage,elapsedMs:-1})]){const bad=await archive({'.canvas-collaboration/runtime-selection.json':JSON.stringify(receipt),'.canvas-collaboration/runtime-usage.json':text});check((await validateMerge(bad,'run',{selection})).modelUsage===null,'Optional invalid telemetry cannot invalidate good artifacts')}
  const originals={'a':'file at a','a%2Fb':'literal percent file','a/b':'nested file','a%2Fb/c':'nested percent file'};
  const collision=await merge([{'a':originals.a,'a%2Fb':originals['a%2Fb']},{'a/b':originals['a/b'],'a%2Fb/c':originals['a%2Fb/c']}]);
  const collisionFiles=await contents(collision.path),variantPaths=collision.report.conflicts.map(c=>c.variants[0].path);

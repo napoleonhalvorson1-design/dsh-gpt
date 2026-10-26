@@ -133,7 +133,20 @@ elif mode=='validate':
    else:
     variant=next((v for v in conflict['variants'] if v['parent']==source),None)
     if not variant or actual!=variant['sha256']:raise RuntimeError('Unknown or mismatched branch resolution')
- print(json.dumps({'ok':True,'conflictsResolved':len(conflicts)}))
+ usage=None
+ # Optional telemetry must never invalidate otherwise valid deliverables.
+ try:
+  record=files.get('.canvas-collaboration/runtime-usage.json')
+  data=json.loads(raw(record)) if record and len(record)<=32768 else {}
+  valid=lambda v:isinstance(v,int) and not isinstance(v,bool) and 0<=v<=9007199254740991
+  expected=report.get('selection') or {}
+  if expected and isinstance(data,dict) and data.get('schemaVersion')==1 and all(data.get(k)==expected[k] for k in ('requestId','model','effort')) and data.get('scope')=='acp-prompts-including-tools' and valid(data.get('elapsedMs')) and valid(data.get('completedPrompts')) and 0<data['completedPrompts']<=1000:
+   tokens=data.get('tokens') if isinstance(data.get('tokens'),dict) else {}
+   usage={k:data[k] for k in ('schemaVersion','requestId','model','effort','scope','elapsedMs','completedPrompts')}
+   usage['stopReason']=data.get('stopReason') if data.get('stopReason') in ('end_turn','max_tokens','max_turn_requests','refusal','cancelled','error') else 'unknown'
+   usage['tokens']={k:tokens.get(k) if valid(tokens.get(k)) else None for k in ('totalTokens','inputTokens','cachedReadTokens','cachedWriteTokens','outputTokens','thoughtTokens')}
+ except (ValueError,TypeError,KeyError):pass
+ print(json.dumps({'ok':True,'conflictsResolved':len(conflicts),'modelUsage':usage}))
 elif mode in ('inspect','export'):
  # Legacy transfer API exposes blocked links, rather than following them.
  with tarfile.open(archive,'r:gz') as tar:

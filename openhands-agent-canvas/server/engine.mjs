@@ -7,6 +7,7 @@ import {transferWorkspace} from './handoff.mjs';
 import {captureNode,mergeArchives,validateMerge,archiveOperation} from './collaboration.mjs';
 import {chooseModel} from '../shared/model-policy.mjs';
 import {EventWakeup} from './event-wakeup.mjs';
+import {executionHistory} from './execution-history.mjs';
 import {validateAdaptiveSeed,planningInstructions,compileAdaptivePlan,compactHandoffs,validateDirectDelivery} from './adaptive.mjs';
 export {ACTIVE,validateWorkflow};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -63,7 +64,7 @@ export class Engine extends SerialEngine {
    if(node.status==='succeeded'&&node.modelCompleted){node.error=null;continue}
    if(node.status==='failed'){
     const c=config.nodeConfigs?.[node.id]||config;let info;try{info=await conversation(c,node.handle?.conversationId||node.conversationId)}catch(e){if(e.status!==404)throw e}
-    if(!info||['finished','error','stuck'].includes(info.execution_status)){node.conversationId=randomUUID();node.handle=null;node.output='';node.cursor=null;node.since=null;node.fatal=null;node.modelCompleted=false;node.snapshotReady=false;node.checkpoint=null;node.submittedAt=null;node.finishedAt=null;node.planningRejected=false;node.selectionApplied=false;node.reasoningEffortUsed=null}
+    if(!info||['finished','error','stuck'].includes(info.execution_status)){node.conversationId=randomUUID();node.handle=null;node.output='';node.cursor=null;node.since=null;node.fatal=null;node.modelCompleted=false;node.snapshotReady=false;node.checkpoint=null;node.submittedAt=null;node.finishedAt=null;node.planningRejected=false;node.modelUsage=null;node.selectionApplied=false;node.reasoningEffortUsed=null}
    }
    node.resumeRequested=true;node.status='pending';node.error=null;node.stopConfirmed=false;
   }
@@ -167,7 +168,7 @@ export class Engine extends SerialEngine {
     const definition=run.workflow.nodes.find(n=>n.id===node.id),parents=run.workflow.coordinationPolicy==='lean'?compactHandoffs(node.dependencies.map(p=>this.store.run(id).nodes[p])):node.dependencies.map(p=>this.store.run(id).nodes[p]).filter(n=>n.output).map(n=>'【'+n.name+' 的交接信息】\n'+n.output.slice(-18000)).join('\n\n');
     if(config.selection?.mode==='auto'&&['auto','planner'].includes(config.selection.source)&&node.mergeReport?.conflicts?.length){config={...config,selection:chooseModel(config,{...definition,modelPolicy:undefined},{...run.workflow,taskComplexity:'complex'},config.policyModels)};config.selection.reason+=' · 文件冲突升级';const latest=this.store.config(id);latest.nodeConfigs[node.id]=config;this.store.setConfig(id,latest);node.modelSelection=config.selection;node.modelRequested=config.selection.model;node.reasoningEffort=config.selection.effort;this.patchNode(id,node)}
     const conflictInstructions=node.mergeReport?.conflicts?.length?'\n\n存在文件冲突，先读取 .canvas-collaboration/handoff.json。各分支文件完整保存在 .canvas-collaboration/inputs/<parent>/<path>，基线在 .canvas-collaboration/base/。请整合解决，禁止忽略冲突；写 .canvas-collaboration/resolutions.json：{"resolutions":{"相对路径":{"source":"custom 或 parent ID 或 base 或 delete","sha256":"最终文件真实SHA-256（删除用null）","reason":"解决原因"}}}}。每个冲突路径必须有记录，整合后用 sha256sum 校验。':'';
-    const collaborationInstructions=node.id==='plan'&&run.adaptivePlan?.status==='pending'?planningInstructions(bundle.teamProfiles,run.workflow):'';
+    const collaborationInstructions=node.id==='plan'&&run.adaptivePlan?.status==='pending'?planningInstructions(bundle.teamProfiles,run.workflow,executionHistory(this.store,bundle.teamProfiles)):'';
     const source=this.store.run(id).repositorySource,repositoryInstructions=source?'\n\n仓库源代码已按提交 '+source.commitSha+' 装入当前目录，来源 '+source.repository+'（'+source.ref+'）。基于此快照实现需求，保留无关文件；仓库凭据由控制器管理。':'';
     const prompt='用户任务：\n'+run.workflow.task+'\n\n你的职责：\n'+definition.prompt+(parents?'\n\n'+parents:'')+'\n\n你在隔离的分支工作目录：'+node.workspace+'。其他 AI 可能同时工作；只修改自己负责的文件，不修改用户其他目录。上游文件已经合并到此目录，交接元数据在 .canvas-collaboration/handoff.json。保留上游内容，给出文件、接口契约与下游注意事项。'+repositoryInstructions+conflictInstructions+collaborationInstructions;
     this.log(id,node.id,'正在并行提交至 '+(node.profileLabel||node.profileId)+'。');node.submittedAt??=new Date().toISOString();this.patchNode(id,node);
@@ -208,11 +209,11 @@ export class Engine extends SerialEngine {
  saveInput(id,node){
   if(node.inputPersistenceVersion!==1||node.inputStored||!this.storage?.config().enabled)return Promise.resolve({ok:true});
   const key=id+'/'+node.id;if(this.inputTasks.has(key))return this.inputTasks.get(key);
-  const promise=(async()=>{try{const {createReadStream}=await import('node:fs'),size=(await stat(node.inputArchive)).size;const results=await Promise.allSettled([this.storage.put('runs/'+id+'/inputs/'+node.id+'/workspace.tar.gz',createReadStream(node.inputArchive),{kind:'stage-input',id,size,contentType:'application/gzip'}),this.storage.json('runs/'+id+'/inputs/'+node.id+'/handoff.json',node.mergeReport,{kind:'handoff',id})]);if(results.some(r=>r.status==='rejected'))throw new ApiError('输入快照尚未完整写入数据桶，请继续以重试存储；已完成的 AI 保留。',502);node.inputStored=true;node.inputStorageError=null;if(!this.closed)this.patchNode(id,{id:node.id,inputStored:true,inputStorageError:null});return {ok:true}}catch(error){node.inputStorageError=error.message;if(!this.closed)this.patchNode(id,{id:node.id,inputStorageError:error.message});return {ok:false,error}}finally{this.inputTasks.delete(key)}})();this.inputTasks.set(key,promise);return promise;
+  const promise=(async()=>{try{await this.storage.persistInput(id,node);node.inputStored=true;node.inputStorageError=null;if(!this.closed)this.patchNode(id,{id:node.id,inputStored:true,inputStorageError:null});return {ok:true}}catch{const message='输入快照尚未完整写入数据桶，请继续以重试存储；已完成的 AI 保留。';node.inputStorageError=message;if(!this.closed)this.patchNode(id,{id:node.id,inputStorageError:message});return {ok:false,error:new ApiError(message,502)}}finally{this.inputTasks.delete(key)}})();this.inputTasks.set(key,promise);return promise;
  }
  async persistDagStage(id,node,config,archive){
   const run=this.store.run(id),inputStored=await this.saveInput(id,node);if(!inputStored.ok)throw inputStored.error;
-  try{archive??=node.snapshotReady?await this.archiveForLocal(run,node,config):await captureNode(config,node,id,this.handoffDirectory);await validateMerge(archive,id,{...node.mergeReport,selection:node.modelSelection?{model:node.modelSelection.model,effort:node.modelSelection.effort,requestId:node.conversationId}:null})}
+  try{archive??=node.snapshotReady?await this.archiveForLocal(run,node,config):await captureNode(config,node,id,this.handoffDirectory);const validation=await validateMerge(archive,id,{...node.mergeReport,selection:node.modelSelection?{model:node.modelSelection.model,effort:node.modelSelection.effort,requestId:node.conversationId}:null});node.modelUsage=validation.modelUsage||null}
   catch(error){if(error.status===400){node.modelCompleted=false;node.status='failed';node.snapshotReady=false;this.patchNode(id,node)}throw error}
   if(this.closed)return;node.snapshotReady=true;node.snapshotReadyAt??=new Date().toISOString();this.patchNode(id,node);
   if(this.storage?.config().enabled){node.checkpoint=await this.storage.checkpoint(run,node,config,{archivePath:archive});if(this.closed)return}
