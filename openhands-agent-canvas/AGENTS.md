@@ -94,3 +94,5 @@ GitHub 名称与授权状态必须一致：readOnly=false 表示配置允许写�
 5.12：规划只写文件职责与必要接口，完整任务由引擎附带。server/execution-history.mjs 汇总最近 50 个运行中已入桶、已确认模型的成功阶段，以及单列的失败次数和已确认停止前等待；停止未交付不混入成功样本。耗时包括模型启动和工具，任务不同，不能宣称模型能力排名。ACP 标准 prompt-result usage 保存为 runtime-usage.json，只含数字用量；缺失保持 null，无效遥测不阻断交付。输入快照也保存独立成功回执并用新流重试。ops/install-execution-policy.mjs 在三个服务校验新脚本后原子更新受保护 profiles.json 的 policyRuntimePath（内容哈希路径），保留属主、组、权限和旧脚本；不改登录，不调用模型。
 
 5.13 / 插件 2.12：阶段可设置 executionPolicy={budgetSeconds,fallbackProfile?,fallbackModelPolicy?}，30–7200 秒，原会话两次确认停止后最多切换一次已验证备用，先确认原输入入桶，新请求及冻结配置事务保存，使用同上游的新目录。原会话恰好完成优先交付，用户取消不切换，输出保存失败不重新推理。strongest 规划默认 300 秒及同模型同深度跨入口后备，三个匹配成功观测可延长至最多 900 秒，显式节点策略优先。历史运行不变。耗时包含旧尝试，停止等待单列。见 docs/execution-budget.md；新测试不调用真实 AI。
+
+5.14 / 插件 2.13：AI 可按阶段设置 runtimeContext=focused/inherit，只在 profiles 声明支持时使用。纯代码阶段 focused 限本次 Codex ACP 子进程的 App/插件和技能目录；需要外部服务或相关技能则 inherit，不确定时继承。项目显式设置优先，默认及历史会话不变。三服务器配置探针不创建 thread、不发 prompt，确认后才开启入口能力；禁止更改用户账号、凭据或托管要求。续跑冻结模式与哈希策略路径，runtimeContextRequested 不是实际行为或速度证明。见 docs/runtime-context.md。

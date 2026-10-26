@@ -11,5 +11,6 @@ install -m 755 bin/canvas.mjs /opt/openhands-control/bin/canvas.mjs
 install -d -m 755 /opt/openhands-control/ops
 install -m 755 ops/configure-qicai-s3.py /opt/openhands-control/ops/configure-qicai-s3.py
 install -m 755 ops/handoff-fast.py ops/install-fast-handoff.mjs ops/acp-policy.py ops/install-execution-policy.mjs /opt/openhands-control/ops/
+install -m 755 ops/probe-codex-context.py /opt/openhands-control/ops/
 systemctl restart openhands-control
 systemctl is-active openhands-control

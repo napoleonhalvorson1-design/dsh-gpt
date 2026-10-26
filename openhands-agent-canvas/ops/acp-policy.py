@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Session-scoped ACP model/effort bridge. Never writes CLI account configuration."""
 import argparse,asyncio,json,os,signal,sys,uuid,pathlib,time
-parser=argparse.ArgumentParser();parser.add_argument('--provider',required=True,choices=['codex','claude-code','deepseek']);parser.add_argument('--model',default='');parser.add_argument('--effort',default='');parser.add_argument('--request-id',default='');parser.add_argument('--catalog-output',default='');parser.add_argument('command',nargs=argparse.REMAINDER);args=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument('--provider',required=True,choices=['codex','claude-code','deepseek']);parser.add_argument('--model',default='');parser.add_argument('--effort',default='');parser.add_argument('--request-id',default='');parser.add_argument('--catalog-output',default='');parser.add_argument('--context',default='inherit',choices=['inherit','focused']);parser.add_argument('command',nargs=argparse.REMAINDER);args=parser.parse_args()
 command=args.command[1:] if args.command[:1]==['--'] else args.command
 if not command:raise SystemExit('ACP command is required')
 if args.effort not in ('','none','low','medium','high','xhigh','max'):raise SystemExit('Invalid reasoning effort')
@@ -25,8 +25,16 @@ def atomic_json(path,data):
 async def main():
  environment=os.environ.copy()
  if args.provider=='claude-code' and args.effort:environment['CLAUDE_CODE_EFFORT_LEVEL']=args.effort
- if args.provider=='codex' and args.effort:
-  config=json.loads(environment.get('CODEX_CONFIG','{}'));config['model_reasoning_effort']=args.effort;environment['CODEX_CONFIG']=json.dumps(config)
+ if args.context=='focused' and args.provider!='codex':raise RuntimeError('Focused context requires Codex')
+ if args.provider=='codex' and (args.effort or args.context=='focused'):
+  config=json.loads(environment.get('CODEX_CONFIG','{}'))
+  if args.effort:config['model_reasoning_effort']=args.effort
+  if args.context=='focused':
+   # Per-session overrides only. Core tools, account/auth, instructions and
+   # managed requirements remain owned by Codex. Other tasks keep inheritance.
+   for key in ('apps','plugins','remote_plugin'):config['features.'+key]=False
+   config['skills.max_context_tokens']=1024
+  environment['CODEX_CONFIG']=json.dumps(config)
  child=await asyncio.create_subprocess_exec(*command,stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.DEVNULL,env=environment,start_new_session=True,limit=8*1024*1024)
  pending={};sessions={};session_cwds={};prompt_contexts={};usage_totals={};waiters={};agent={};tasks=set();stopped=asyncio.Event();write_lock=asyncio.Lock()
  loop=asyncio.get_running_loop()

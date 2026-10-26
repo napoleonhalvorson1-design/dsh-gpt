@@ -1,0 +1,98 @@
+{
+  "version": "5.14.0",
+  "goalSpeedFactor": 11,
+  "completeGoal": false,
+  "scope": "Read-only native configuration probes and historical workload metadata; no new real model run",
+  "historicalSuccessfulRun": {
+    "id": "engine-performance-live-20261027-r1",
+    "model": "gpt-6-astra",
+    "baseInstructionTextChars": 21546,
+    "developerInstructionTextChars": [
+      39907,
+      2429,
+      271
+    ],
+    "totalInputTokensAcrossTurns": 164844,
+    "cachedInputTokens": 151296,
+    "outputTokens": 7027,
+    "reasoningOutputTokens": 641,
+    "modelMs": 215754
+  },
+  "historicalInterruptedDeepSeek": {
+    "id": "engine-performance-fastplan-20261027-r1",
+    "status": "cancelled",
+    "stopConfirmed": true,
+    "delivered": false,
+    "filesBeforeStop": [
+      {
+        "path": "shared/run-performance.mjs",
+        "bytes": 26597,
+        "modifiedAt": "2026-10-26T18:58:26.330661Z"
+      },
+      {
+        "path": "scripts/test-run-performance.mjs",
+        "bytes": 19157,
+        "modifiedAt": "2026-10-26T18:58:32.187672Z"
+      }
+    ],
+    "missingDeliverables": [
+      "docs/run-performance.md"
+    ],
+    "finalAssistantOutputChars": 0
+  },
+  "nativeProbes": [
+    {
+      "profileId": "codex-shanghai",
+      "verified": true,
+      "scope": "owned-subprocess-config-read",
+      "inferenceStarted": false,
+      "threadCreated": false,
+      "overrides": {
+        "features.apps": false,
+        "features.plugins": false,
+        "features.remote_plugin": false,
+        "skills.max_context_tokens": 1024
+      }
+    },
+    {
+      "profileId": "codex-silicon",
+      "verified": true,
+      "scope": "owned-subprocess-config-read",
+      "inferenceStarted": false,
+      "threadCreated": false,
+      "overrides": {
+        "features.apps": false,
+        "features.plugins": false,
+        "features.remote_plugin": false,
+        "skills.max_context_tokens": 1024
+      }
+    },
+    {
+      "profileId": "codex-seoul",
+      "verified": true,
+      "scope": "owned-subprocess-config-read",
+      "inferenceStarted": false,
+      "threadCreated": false,
+      "overrides": {
+        "features.apps": false,
+        "features.plugins": false,
+        "features.remote_plugin": false,
+        "skills.max_context_tokens": 1024
+      }
+    }
+  ],
+  "newModelLatency": null,
+  "newTokenReduction": null,
+  "wholeTaskSpeedFactor": null,
+  "limitations": [
+    "A scoped config read confirms supported effective keys, not every runtime behavior or model latency.",
+    "No thread or prompt was created by the probes.",
+    "Inherited sessions and third-party agents keep their existing context.",
+    "Partial files from a confirmed interrupted session are not a successful delivery.",
+    "No overall 11x speedup is established."
+  ],
+  "sources": [
+    "https://learn.chatgpt.com/docs/config-file/config-reference",
+    "https://learn.chatgpt.com/docs/config-file/config-advanced"
+  ]
+}

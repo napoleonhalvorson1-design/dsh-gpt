@@ -21,10 +21,11 @@ export function compileExecutionPolicy(primary,node,flow,team={}){
  primary.executionPolicy=structuredClone(policy);
  if(!policy.fallbackProfile)return primary;
  const candidate=team[policy.fallbackProfile];if(!candidate||candidate.mode!=='remote')throw new ApiError('后备执行入口不可用。',409);
- const next={...candidate},manual=!flow.modelMode||flow.modelMode==='manual',definition={...node,modelPolicy:policy.fallbackModelPolicy||node.modelPolicy};
+ const next={...candidate,...(primary.runtimeContext?{runtimeContext:primary.runtimeContext==='focused'&&candidate.model==='acp:codex'&&candidate.runtimeContextVersion===1?'focused':'inherit'}:{})},manual=!flow.modelMode||flow.modelMode==='manual',definition={...node,modelPolicy:policy.fallbackModelPolicy||node.modelPolicy};
  if(primary.selection?.planner){definition.liveModel=primary.selection.model;definition.reasoningEffort=primary.selection.effort;}
  if(manual){definition.liveModel=node.liveModel||primary.selection?.model||primary.acpModel;definition.reasoningEffort=node.reasoningEffort||primary.selection?.effort;}
  next.selection=chooseModel(next,definition,{...flow,modelMode:flow.modelMode||'manual'},next.policyModels||[]);
+ if(flow.runtimeContext==='focused'&&next.runtimeContext!=='focused')throw new ApiError('后备入口不支持项目指定的精简上下文。',409);
  if(!next.selection?.verified)throw new ApiError('自动后备只能使用已验证模型。',409);
  if(definition.liveModel&&next.selection.model!==definition.liveModel)throw new ApiError('后备不能改写手动指定的模型。',409);
  if(primary.selection?.planner)next.selection={...next.selection,planner:true,source:'planner',reason:'已验证的同一强规划模型在后备入口继续'};
