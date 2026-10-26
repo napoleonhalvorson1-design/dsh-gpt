@@ -147,3 +147,7 @@ DeepSeek 阶段等待较长时，用 canvas_run_status 的 view=trace、nodeId�
 ## 规划的定点修正（5.24 / 插件 2.21）
 
 新运行查看 planRepairVersion；节点 autoPlanRepairCount、planRepair、attempts 给出实际修正与尝试。自动修正使用同一入口、模型和深度的新会话及隔离目录；原始和 repair-N 快照分别保存，不覆盖已有成果。存储失败只补存储，不重跑模型；原预算不足 30 秒或用户取消时不再派发。修正再次失败等待明确继续，不循环调用 AI。创建响应不确定且原生会话暂时 404 时，继续使用原请求 ID 核对，不另建重复任务。详见 [规划修正](references/plan-repair.md)。
+
+## 依赖路径优先（5.25 / 插件 2.22）
+
+新自主协作运行优先让剩余依赖路径较长的就绪阶段占空闲槽；负责人可选填 estimatedSeconds（1–7200 整数秒，非预算），仍自行选择分工、模型和深度。估计及来源随计划冻结在 run.scheduling，续跑不重估，未知耗时保持 null；桶屏障和模型调用次数不变。历史/固定运行沿用原顺序。见 [调度说明](references/critical-path.md)。
