@@ -127,3 +127,9 @@ strongest 新运行按工作台保留量选择同模型、同深度的已验证�
 本项目的新需求可用 canvas_start_run 的 baseRunId 或 CLI --base-run，继承同项目上轮成功且已校验入桶的完整代码与测试，再实现改动；未完成任务仍使用 resume。先读 [增量开发](references/incremental-development.md)，不要重新生成已有项目。run.artifactSource 给出固定来源与新基线哈希，存储失败不重跑旧 AI。
 
 5.18 / 插件 2.17：后台同步的独立根共享统一队列，活动运行优先，lastSyncBatch 实时给出 total/active/pending/completed 与逐项结果计数；busy 且未 finished 不代表整批成功。见 [后台同步](references/storage-sync.md)。
+
+## 初始判断与单次策略（5.19 / 插件 2.18）
+
+未固定模式/深度/难度的新自主任务，由 Codex 按实际改动语义评估 planningComplexity（auto/simple/standard/complex），通过 canvas_start_run 或 CLI --planning-complexity 只提示最强负责人的初始设置。后续阶段仍由负责人独立选择模型、复杂度和深度；不要把初始评估填成全程 taskComplexity，不能仅凭说明字数或为提速把复杂工作降级，不确定用 auto。用户明确固定的设置优先，DeepSeek Flash/max 锁保持。
+
+用户要求单次覆盖时，MCP start 支持 modelMode/reasoningEffort/taskComplexity；CLI start 用 --mode/--effort/--complexity。快捷创建保留两类难度。均不自动修改保存项目或已开始的原生设置；续跑冻结原策略。详细边界和使用见 [运行策略](references/run-policy.md)。新 schema 尚未刷新时用配套 CLI，不重建插件。
