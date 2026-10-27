@@ -14,7 +14,7 @@ import {createControl} from '../server/http.mjs';
 const directory=await mkdtemp(join(tmpdir(),'canvas-parallel-'));
 const workspaces=new Map(),conversations=new Map(),objects=new Map(),plans=new Map(),creates=[];
 const repositoryFixture={sha:'a'.repeat(40),lookups:0,archives:0,gets:0},repositoryFiles=new Map([['existing/source.js',Buffer.from('export const source = 1;\n')],['existing/delete.txt',Buffer.from('delete this\n')],['existing/中文.bin',Buffer.from([0,255,10,128])],['.canvas-collaboration/plan.json',Buffer.from('stale protocol must be excluded')]]);
-const fixtureErrors=[],peaks=new Map(),deliveryChecks=new Map();
+const fixtureErrors=[],peaks=new Map(),deliveryChecks=new Map(),streamArchives=new Map();
 let checks=0,app,controlBase;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const check=(value,message)=>{assert.ok(value,message);checks++};
@@ -54,7 +54,7 @@ function stageFiles(nodeId,files,plan){
   files.set('assets/binary.bin',Buffer.from([0,13,10,255,128,1]));
  }else if(nodeId==='a'){
   if(plan.repositoryDelete)files.delete('existing/delete.txt');
-  files.set('shared.txt',Buffer.from('changed by branch a\n'));files.set('frontend/a.txt',Buffer.from('frontend output\n'));
+  if(!plan.streamCommit)files.set('shared.txt',Buffer.from('changed by branch a\n'));files.set('frontend/a.txt',Buffer.from('frontend output\n'));
  }else if(nodeId==='b'){
   files.set('backend/b.txt',Buffer.from('backend output\n'));
   if(plan.conflict)files.set('shared.txt',Buffer.from('changed by branch b\n'));
@@ -89,6 +89,7 @@ const fixture=http.createServer(async(req,res)=>{
     const match=key.match(/runs\/([^/]+)\/stages\/([^/]+)(?:\/repair-(\d+))?\/workspace\.tar\.gz$/);
     if(match){
      const plan=planFor(match[1]),nodeId=match[2];
+     if(plan.streamGate&&nodeId.startsWith('_canvas_plan_commit_')){plan.streamGate.entered=true;await plan.streamGate.promise}
      if(plan.checkpointDelayMs)await sleep(plan.checkpointDelayMs);
      if(plan.checkpointGate?.nodeId===nodeId){plan.checkpointGate.entered=true;await plan.checkpointGate.promise}
      if(plan.failCheckpoint===nodeId||plan.failRepairCheckpoint&&match[3]){res.writeHead(403,{'Content-Type':'application/xml'});res.end('<Error><Code>AccessDenied</Code></Error>');return}
@@ -100,6 +101,16 @@ const fixture=http.createServer(async(req,res)=>{
   }
   assert.equal(req.headers['x-session-api-key'],'native-fixture-private');
   const region=parts.shift(),path='/'+parts.join('/'),target=url.searchParams.get('path');
+  if(path==='/api/file/download'){
+   const capture=streamArchives.get(region+target);if(capture){res.writeHead(200,{'Content-Type':'application/gzip'});res.end(capture);return}
+   const ws=workspace(region,target),file=ws?.files.get(target.slice(ws.path.length+1));if(!file){json({error:'missing'},404);return}res.writeHead(200,{'Content-Type':'application/octet-stream'});res.end(file);return;
+  }
+  if(path==='/api/bash/execute_bash_command'&&JSON.parse(body).command.includes("<<'CANVAS_STREAM_PLAN'")){
+   const encoded=JSON.parse(body).command.match(/^\/usr\/bin\/python3 -I - ([A-Za-z0-9+/=]+)/)[1],spec=JSON.parse(Buffer.from(encoded,'base64')),plan=planFor(spec.runId),ws=workspace(region,spec.workspace);
+   if(!plan.streamCommit){json({exit_code:0,stdout:JSON.stringify({available:false})});return}
+   const files=new Map([['.canvas-collaboration/plan.json',ws.files.get('.canvas-collaboration/plan.json')],['.canvas-collaboration/runtime-selection.json',ws.files.get('.canvas-collaboration/runtime-selection.json')],['api.json',Buffer.from('frozen interface\n')]]),bytes=tar(spec.runId,files),sha=createHash('sha256').update(bytes).digest('hex'),path='/workspace/runs/'+spec.runId+'/.canvas-stream-plans/'+sha+'.tar.gz';streamArchives.set(region+path,bytes);
+   json({exit_code:0,stdout:JSON.stringify({available:true,requestId:spec.requestId,archive:path,archiveSha256:sha,size:bytes.length,planSha256:createHash('sha256').update(files.get('.canvas-collaboration/plan.json')).digest('hex'),markerSha256:'a'.repeat(64),files:[{path:'api.json',sha256:createHash('sha256').update(Buffer.from('frozen interface\n')).digest('hex'),mode:420}]})});return;
+  }
   if(path==='/api/bash/execute_bash_command'){
    const data=JSON.parse(body),encoded=data.command.match(/^\/usr\/bin\/python3 -I - ([A-Za-z0-9+/=]+) <<'CANVAS_DELIVERY_CHECK'/)?.[1];assert(encoded,'Only the request-bound check helper is allowed');
    const spec=JSON.parse(Buffer.from(encoded,'base64')),plan=planFor(spec.runId),key=spec.requestId;let job=deliveryChecks.get(key);
@@ -149,7 +160,7 @@ const fixture=http.createServer(async(req,res)=>{
     const message=record.fail?'Warning\n'+JSON.stringify({type:'error',status:400,error:{code:'model_not_found',message:'Fixture provider failure'}}):record.nodeId+' completed';
     json({items:record.status==='finished'||plan.fatalWhileRunning?.has(record.nodeId)?[{id:record.id+'-output',kind:'ActionEvent',source:'agent',action:{kind:'FinishAction',message}}]:[],next_page_id:null});return;
    }
-   if(record.status==='running'&&!plan.hold?.has(record.nodeId)&&Date.now()>=record.readyAt)record.status='finished';
+   if(record.status==='running'&&!plan.hold?.has(record.nodeId)&&Date.now()>=record.readyAt){record.status='finished';if(record.nodeId==='plan'&&plan.streamCommit){const ws=workspace(record.region,record.workspace);ws.files.set('coordinator.txt',Buffer.from('coordinator final code\n'));if(plan.changeFrozen)ws.files.set('api.json',Buffer.from('changed illegally\n'));else ws.files.set('api.json',Buffer.from('frozen interface\n'));}}
    if(record.status==='paused')record.readsAfterPause++;
    json({id:record.id,execution_status:record.status});return;
   }
@@ -390,6 +401,15 @@ try{
  const directRetry={adaptive:directPlan,failCheckpoint:'plan'};start('direct-storage-retry',directRetry,leanSeed);await waitRun('direct-storage-retry','failed');directRetry.failCheckpoint=null;await app.engine.resume('direct-storage-retry',bundle);await waitRun('direct-storage-retry','succeeded');check(records('direct-storage-retry').length===1,'Direct-delivery storage retry preserves the completed coordinator without inference replay');
 
  const strongSelection={mode:'auto',model:'gpt-6-astra',effort:'medium',complexity:'standard',planner:true,verified:true},strongConfig={...configs.plan,commands:{codex:'/fixture/codex'},policyRuntimePath:'/workspace/.canvas-runtime/fixture.py',policyModels:[{id:'gpt-6-astra',verified:true,efforts:['medium']}],selection:strongSelection},strongBundle={...bundle,nodeConfigs:{...configs,plan:strongConfig},teamProfiles:{...bundle.teamProfiles,[strongConfig.profileId]:strongConfig}},strongSeed={...leanSeed,plannerPolicy:'strongest'},missingPlan={...directPlan,deliverables:['missing-output.js']};
+ const streamedPlan={...aiPlan,deliveryMode:'streamed',coordinator:{prompt:'Implement coordinator.txt while worker owns frontend/a.txt'},stages:[stage('a','build')],maxParallelNodes:2},streamConfig={...strongConfig,nativePlanCommitVersion:1},streamBundle={...strongBundle,nodeConfigs:{...strongBundle.nodeConfigs,plan:streamConfig}},streamed={adaptive:streamedPlan,streamCommit:true,hold:new Set(['plan'])};
+ start('stream-overlap',streamed,strongSeed,streamBundle);await waitFor(()=>records('stream-overlap','a').length,'Worker starts before coordinator finishes');const overlap=await state('stream-overlap');check(!overlap.nodes.plan.modelCompleted&&overlap.nodes.plan.planCommitted&&overlap.streamingPlan.checkpoint&&records('stream-overlap').length===2,'Frozen plan and S3 barrier unlock a real worker while the coordinator remains active');check(!records('stream-overlap','a')[0].inherited.has('coordinator.txt'),'Workers get the immutable committed tree without uncommitted coordinator files');streamed.hold.clear();const streamDone=await waitRun('stream-overlap','succeeded');check(streamDone.nodes._canvas_coordinator_result.artifactOnly&&records(streamDone.id).length===2,'Coordinator file-result node does not create a third model');const streamFiles=await request('/runs/'+streamDone.id+'/files');check(streamFiles.items.some(f=>f.path==='coordinator.txt')&&streamFiles.items.some(f=>f.path==='frontend/a.txt'),'Final common-base merge preserves both concurrent implementations');
+ const streamRestart={adaptive:streamedPlan,streamCommit:true,hold:new Set(['plan','a'])};start('stream-restart',streamRestart,strongSeed,streamBundle);await waitFor(()=>records('stream-restart','a').length,'Both models active before restart');await idle();await open();streamRestart.hold.clear();await waitRun('stream-restart','succeeded');check(records('stream-restart').length===2,'Restart reconnects the active coordinator despite its early data readiness');
+ const streamStop={adaptive:streamedPlan,streamCommit:true,hold:new Set(['plan','a'])};start('stream-stop',streamStop,strongSeed,streamBundle);await waitFor(()=>records('stream-stop','a').length,'Worker active before stop');await request('/runs/stream-stop/stop','POST',{});await waitRun('stream-stop','cancelled');check(records('stream-stop').every(r=>r.status==='paused'),'Stop confirms both the still-active coordinator and worker');
+ const frozenChange={adaptive:streamedPlan,streamCommit:true,hold:new Set(['plan']),changeFrozen:true};start('stream-frozen-change',frozenChange,strongSeed,streamBundle);await waitFor(()=>records('stream-frozen-change','a').length,'Worker receives frozen API');frozenChange.hold.clear();const frozenFailed=await waitRun('stream-frozen-change','failed');check(frozenFailed.error.includes('Committed interface changed')&&records(frozenFailed.id).length===2,'A coordinator cannot silently change an interface after workers start');
+ const streamCheck={adaptive:{...streamedPlan,stages:[stage('a','build'),stage('c','verify',['a'])]},streamCommit:true,hold:new Set(['plan'])};start('stream-final-check',streamCheck,strongSeed,streamBundle);await waitFor(()=>app.store.run('stream-final-check')?.nodes.a?.outputReady,'Worker completes while coordinator works');check(!records('stream-final-check','c').length,'Final verification cannot start before coordinator files are ready');streamCheck.hold.clear();await waitRun('stream-final-check','succeeded');check(records('stream-final-check','c')[0].inherited.has('coordinator.txt'),'Final verification receives coordinator implementation and workers together');
+ const blockedStream={adaptive:streamedPlan,streamCommit:true,hold:new Set(['plan']),streamGate:gate('early')};start('stream-bucket-cancel',blockedStream,strongSeed,streamBundle);await waitFor(()=>blockedStream.streamGate.entered,'Early checkpoint reaches bucket');check(records('stream-bucket-cancel').length===1,'Unconfirmed early bucket persistence cannot release a worker');await request('/runs/stream-bucket-cancel/stop','POST',{});blockedStream.streamGate.release();await waitRun('stream-bucket-cancel','cancelled');check(records('stream-bucket-cancel').length===1,'Cancellation during early checkpoint save cannot launch workers');
+ start('stream-no-marker',{adaptive:streamedPlan},strongSeed,streamBundle);const lateStream=await waitRun('stream-no-marker','succeeded');check(!lateStream.streamingPlan&&!lateStream.nodes._canvas_coordinator_result&&records(lateStream.id).length===2,'Missing early marker falls back to normal plan handoff without extra inference');
+ const increment={...strongSeed,baseRunId:streamDone.id};plans.set('stream-increment',{adaptive:directPlan});app.engine.enqueue({id:'stream-increment',projectId:streamDone.projectId,workflow:increment},strongBundle);await waitRun('stream-increment','succeeded');check(records('stream-increment','plan')[0].inherited.has('coordinator.txt')&&records('stream-increment','plan')[0].inherited.has('frontend/a.txt'),'Incremental development reconstructs the early shared base and coordinator result reference');
  const checkedSeed={...strongSeed,deliveryValidation:{command:'node contract.mjs',timeoutSeconds:10}};
  start('delivery-check-pass',{adaptive:directPlan},checkedSeed,strongBundle);const checkPassed=await waitRun('delivery-check-pass','succeeded');check(checkPassed.deliveryCheck.current.status==='passed'&&checkPassed.deliveryCheck.attempts.length===1&&checkPassed.deliveryCheck.current.checkpoint.key===checkPassed.nodes.plan.checkpoint.key&&records(checkPassed.id).length===1,'Explicit final check passes without another AI call');
  const fixCheck={adaptive:directPlan,checkFailOnce:true};start('delivery-check-fix',fixCheck,checkedSeed,strongBundle);const fixedCheck=await waitRun('delivery-check-fix','succeeded');check(fixedCheck.deliveryCheck.repairCount===1&&fixedCheck.deliveryCheck.autoRepairCount===1&&fixedCheck.deliveryCheck.attempts.length===2&&fixCheck.checkStarts===2&&records(fixedCheck.id).length===2,'One confirmed failure immediately triggers one strongest repair and one fresh check');

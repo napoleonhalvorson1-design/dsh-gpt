@@ -8,8 +8,9 @@ import {validateDeliveryValidation} from '../shared/delivery-validation.mjs';
 export const ACTIVE=new Set(['queued','running','reconnecting','stopping']);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const safeId=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,100}$/.test(value);
-export function validateWorkflow(input){
+export function validateWorkflow(input,{internalArtifacts=false}={}){
   if(!input||typeof input.title!=='string'||!Array.isArray(input.nodes)||!Array.isArray(input.edges)||input.nodes.length>100||input.edges.length>300)throw new ApiError('工作流格式无效。');
+  if(!internalArtifacts&&input.nodes.some(n=>n?.id?.startsWith('_canvas_coordinator_')||n?.id?.startsWith('_canvas_plan_commit_')))throw new ApiError('提前交接的节点标识为引擎保留。');
   validateModelPolicy(input);validateRuntimeContext(input.runtimeContext);const deliveryValidation=validateDeliveryValidation(input.deliveryValidation);if(deliveryValidation&&input.nodes.some(n=>n?.id?.startsWith("_canvas_delivery_")))throw new ApiError("交付检查保留 _canvas_delivery_ 标识。");
   if(input.plannerPolicy!==undefined&&!["strongest","manual"].includes(input.plannerPolicy))throw new ApiError("规划模型策略无效。");
   if(input.coordinationPolicy!==undefined&&!["lean","standard"].includes(input.coordinationPolicy))throw new ApiError("协作开销设置无效。");

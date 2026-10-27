@@ -73,6 +73,15 @@ elif mode=='repository':
    roots.add(member.name.split('/')[0])
  if len(roots)!=1:raise RuntimeError('Repository archive must have one root')
  files=load(archive,next(iter(roots)),False);write(sys.argv[3],sys.argv[4],files);print(json.dumps({'files':len(files),'bytes':sum(map(len,files.values()))}))
+elif mode=='stream-commit':
+ spec=json.load(sys.stdin);root=spec['runId'];out=load(spec['base'],root,False) if spec.get('base') else {};frozen=load(spec['capture'],root)
+ out.update(frozen);out['.canvas-collaboration/handoff.json']=(json.dumps({'schemaVersion':1,'runId':root,'nodeId':'plan-commit','parents':[],'conflicts':[],'sources':[]})+'\n').encode();write(archive,root,out);print(json.dumps({'files':len(out),'bytes':sum(map(len,out.values()))}))
+elif mode=='check-frozen':
+ spec=json.load(sys.stdin);files=load(archive,spec['runId'])
+ for expected in spec['files']:
+  value=files.get(expected['path'])
+  if value is None or digest(value)!=expected['sha256'] or value.mode!=expected['mode']:raise RuntimeError('Committed interface changed: '+expected['path'])
+ print(json.dumps({'valid':True}))
 elif mode=='repair':
  spec=json.load(sys.stdin);root=spec['runId'];original=load(spec['archive'],root)
  plan=original.get('.canvas-collaboration/plan.json');out={p:v for p,v in original.items() if not p.startswith('.canvas-collaboration/')}

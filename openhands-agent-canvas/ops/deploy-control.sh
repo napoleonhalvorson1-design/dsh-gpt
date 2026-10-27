@@ -5,7 +5,7 @@ if [[ $EUID -ne 0 ]]; then echo 'Run with sudo from the repository root.' >&2; e
 for file in server/*.mjs shared/*.mjs; do /opt/openhands-control/node --check "$file"; done
 install -d -m 755 /opt/openhands-control/server /opt/openhands-control/shared
 install -m 644 server/*.mjs /opt/openhands-control/server/
-install -m 644 server/handoff.py server/dsh-trace.py server/delivery-check.py /opt/openhands-control/server/
+install -m 644 server/handoff.py server/dsh-trace.py server/delivery-check.py server/stream-plan.py /opt/openhands-control/server/
 install -m 644 shared/*.mjs shared/*.json /opt/openhands-control/shared/
 install -m 755 bin/canvas.mjs /opt/openhands-control/bin/canvas.mjs
 install -d -m 755 /opt/openhands-control/ops

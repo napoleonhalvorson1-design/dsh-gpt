@@ -44,7 +44,7 @@ export function analyzeRun(run, { now } = {}) {
   if (live && run.finishedAt == null && now === undefined) warn('run', 'missing_time', 'now');
   const elapsedMs = duration(created, ended, 'run', 'elapsedMs');
   const source = run.nodes && typeof run.nodes === 'object' && !Array.isArray(run.nodes) ? run.nodes : {};
-  const ids = [...new Set([...(Array.isArray(run.order) ? run.order.filter(id => typeof id === 'string' && Object.hasOwn(source, id)) : []), ...Object.keys(source)])];
+  const ids = [...new Set([...(Array.isArray(run.order) ? run.order.filter(id => typeof id === 'string' && Object.hasOwn(source, id)) : []), ...Object.keys(source)])].filter(id=>source[id]?.artifactOnly!==true);
   const parsed = new Map(ids.map(id => {
     const node = source[id] && typeof source[id] === 'object' ? source[id] : {};
     return [id, { node, times: FIELDS.map(field => read(node[field], id, field)) }];
@@ -77,7 +77,7 @@ export function analyzeRun(run, { now } = {}) {
     };
     let ready = null;
     if (Array.isArray(node.dependencies)) {
-      const dependencyEnds = node.dependencies.map(dep => parsed.get(dep)?.times[5] ?? null);
+      const dependencyEnds = node.dependencies.map(dep => source[dep]?.artifactOnly===true ? timestamp(source[dep].outputReadyAt) : dep==='plan'&&source[dep]?.planCommitted ? timestamp(run.streamingPlan?.committedAt) : parsed.get(dep)?.times[5] ?? null);
       if (created !== null && dependencyEnds.every(t => t !== null)) ready = Math.max(created, ...dependencyEnds);
       else warn(id, 'unknown_dependencies', 'queueMs');
     } else warn(id, 'unknown_dependencies', 'queueMs');

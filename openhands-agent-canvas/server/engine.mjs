@@ -15,6 +15,7 @@ import {pinRunSource} from './run-source.mjs';
 import {placePlanner} from './planner-placement.mjs';
 import {preparePlanRepair} from './plan-repair.mjs';
 import {freezeSchedule,stageOrder} from './critical-path.mjs';
+import {maybeStreamPlan,streamCapability,dataCheckpoint,publishCoordinatorResult,checkCommittedPlan} from './streaming-plan.mjs';
 import {validationConfig,validateDelivery,stopDeliveryCheck,prepareDeliveryRepair} from './delivery-validation.mjs';
 import {validateAdaptiveSeed,planningInstructions,compileAdaptivePlan,compactHandoffs,validateDirectDelivery} from './adaptive.mjs';
 export {ACTIVE,validateWorkflow};
@@ -27,8 +28,8 @@ function dependencies(flow){
  return Object.fromEntries(flow.nodes.filter(isAgent).map(n=>[n.id,[...new Set(nearest(n.id))]]));
 }
 export class Engine extends SerialEngine {
- constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.maxDagActive=options.maxDagActive??10;this.maxStageActive=options.maxStageActive??10;this.nodeActive=new Set();this.stageActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false;this.clock=options.clock||Date.now}
- close(){super.close();this.repositorySource?.close();this.runSource?.close();for(const feed of this.eventWakeups.values())feed.close();this.eventWakeups.clear()}
+ constructor(store,options={}){super(store,{...options,maxActive:options.maxActive??3});this.maxNodeActive=options.maxNodeActive??5;this.maxDagActive=options.maxDagActive??10;this.maxStageActive=options.maxStageActive??10;this.nodeActive=new Set();this.stageActive=new Set();this.inputTasks=new Map();this.eventWakeups=new Map();this.suppressTick=false;this.streamProbes=new Map();this.clock=options.clock||Date.now}
+ close(){super.close();this.repositorySource?.close();this.runSource?.close();for(const feed of this.eventWakeups.values())feed.close();this.eventWakeups.clear();this.streamProbes.clear()}
  tick(){
   if(this.suppressTick||this.closed)return;
   const ids=this.store.runnable(),recovering=run=>Object.values(run?.nodes||{}).some(n=>!n.modelCompleted&&['running','reconnecting'].includes(n.status)&&(n.handle||n.submittedAt));
@@ -53,7 +54,7 @@ export class Engine extends SerialEngine {
   try{if(atomic){this.store.db.exec('BEGIN IMMEDIATE');transaction=true}run=super.enqueue({...input,workflow:flow},config);
   if(artifactSource){run.artifactSource=artifactSource;this.store.saveRun(run)}
   if(deliveryCheck){run.deliveryCheck=deliveryCheck;this.store.saveRun(run)}
-  if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive'){run.adaptivePlan={status:'pending',plannerId:'plan'};run.schedulingVersion=1;if(config.nodeConfigs?.plan?.selection?.planner&&config.nodeConfigs.plan.selection.verified)run.planRepairVersion=1;}run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
+  if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive'){run.adaptivePlan={status:'pending',plannerId:'plan'};run.schedulingVersion=1;if(this.storage?.config().enabled&&streamCapability(config.nodeConfigs?.plan))run.streamPlanVersion=1;if(config.nodeConfigs?.plan?.selection?.planner&&config.nodeConfigs.plan.selection.verified)run.planRepairVersion=1;}run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
   if(transaction){this.store.db.exec('COMMIT');transaction=false}}catch(error){if(transaction)this.store.db.exec('ROLLBACK');throw error}finally{this.suppressTick=false}
   this.tick();return this.store.run(run.id);
  }
@@ -80,7 +81,7 @@ export class Engine extends SerialEngine {
   // A failed stage upload resumes at the checkpoint barrier, without another model request.
   for(const nodeId of Object.keys(run.nodes)){
    const node=run.nodes[nodeId];
-   if(node.outputReady)continue;
+   if(node.artifactOnly||node.outputReady&&(!node.planCommitted||node.modelCompleted))continue;
    if(node.status==='succeeded'&&node.modelCompleted){node.error=null;continue}
    if(node.budgetRecovery?.state==='storage-blocked'){node.budgetRecovery.state='stopping';node.status='pending';node.error=null;node.resumeRequested=false;continue}
    if(node.status==='failed'){
@@ -100,7 +101,7 @@ export class Engine extends SerialEngine {
   while(!this.closed&&this.nodeActive.size>=this.maxNodeActive)await sleep(Math.max(20,Math.min(this.pollMs,500)));
   if(this.closed)return;const key=id+'/legacy';this.nodeActive.add(key);try{return await super.execute(id)}finally{this.nodeActive.delete(key)}
  }
- ready(node){return node.status==='succeeded'&&node.outputReady===true}
+ ready(node){return node.planCommitted===true&&!node.modelCompleted||node.status==='succeeded'&&node.outputReady===true}
  async executeDag(id){
   const tasks=new Map();if(this.store.run(id).status!=='stopping')this.patch(id,r=>{r.status='running';r.error=null});
   try{while(!this.closed){
@@ -108,13 +109,14 @@ export class Engine extends SerialEngine {
    if(run.cancelRequested){
     this.patch(id,r=>{r.status='stopping';r.activeNodeIds=[...tasks.keys()]});
     // Restart recovery must also stop every previously started branch.
-    for(const node of Object.values(run.nodes))if(!tasks.has(node.id)&&!this.ready(node)&&!node.modelCompleted&&!node.stopConfirmed&&(node.handle||node.submittedAt||['running','reconnecting','paused'].includes(node.status)))this.launch(id,node,tasks,true);
+    for(const node of Object.values(run.nodes))if(!tasks.has(node.id)&&(!this.ready(node)||node.planCommitted&&!node.modelCompleted)&&!node.modelCompleted&&!node.stopConfirmed&&(node.handle||node.submittedAt||['running','reconnecting','paused'].includes(node.status)))this.launch(id,node,tasks,true);
     if(!tasks.size){await stopDeliveryCheck(this,this.store.run(id));if(this.closed)return;this.patch(id,r=>{r.status='cancelled';r.error=null;r.activeNodeIds=[];r.finishedAt=new Date().toISOString()});this.log(id,'workflow','所有已启动分支均已确认停止，成功阶段已保留。');return}
    }else{
+    if(run.adaptivePlan?.status==='pending'){await maybeStreamPlan(this,id);run=this.store.run(id)}
     if(run.adaptivePlan?.status==='pending'&&this.ready(run.nodes.plan)){await this.expandPlan(id);run=this.store.run(id)}
     for(const nodeId of stageOrder(run)){
      run=this.store.run(id);const node=run.nodes[nodeId];if(run.cancelRequested)break;
-     if(tasks.has(nodeId)||this.ready(node)||node.budgetRecovery?.state!=='stopping'&&(['failed','paused'].includes(node.status)||node.error))continue;
+     if(node.artifactOnly||tasks.has(nodeId)||this.ready(node)&&(!node.planCommitted||node.modelCompleted)||node.budgetRecovery?.state!=='stopping'&&(['failed','paused'].includes(node.status)||node.error))continue;
      const inferenceTasks=[...tasks.keys()].filter(id=>!run.nodes[id].modelCompleted).length;
      if(!node.modelCompleted&&inferenceTasks>=run.maxParallelNodes)continue;
      if(this.stageActive.size>=this.maxStageActive&&!this.stageActive.has(id+'/'+nodeId))continue;
@@ -132,7 +134,7 @@ export class Engine extends SerialEngine {
      if(this.nodeActive.size<this.maxNodeActive&&this.stageActive.size<this.maxStageActive)throw new ApiError('工作流依赖无法继续，请检查未完成的上游节点。',409);
     }
    }
-   run=this.store.run(id);const active=[...tasks.keys()],completed=Object.values(run.nodes).filter(n=>this.ready(n)).length;
+   run=this.store.run(id);const active=[...tasks.keys()],completed=Object.values(run.nodes).filter(n=>this.ready(n)&&(!n.planCommitted||n.modelCompleted)).length;
    if(JSON.stringify(run.activeNodeIds)!==JSON.stringify(active)||run.completedCount!==completed)this.patch(id,r=>{r.activeNodeIds=active;r.completedCount=completed;r.index=completed});
    await Promise.race([...tasks.values(),sleep(Math.max(20,Math.min(this.pollMs,500)))]);
   }}finally{if(this.closed)await Promise.allSettled([...tasks.values()])}
@@ -151,19 +153,21 @@ export class Engine extends SerialEngine {
   try{plan=await archiveOperation('plan',archive,[id]);compiled=compileAdaptivePlan(plan,run,bundle);if(compiled.summary.directDelivery)validateDirectDelivery(plan,await archiveOperation('inspect',archive,[id]))}
   catch(error){if(this.closed)return;if(error.status===400){const repair=await preparePlanRepair(this,id,error,archive);if(repair)return;this.patchNode(id,{id:'plan',status:'failed',outputReady:false,modelCompleted:false,planningRejected:true,error:error.message});}throw error}
   if(this.closed)return;run=this.store.run(id);if(run.cancelRequested||run.adaptivePlan?.status!=='pending')return;
-  const deps=dependencies(compiled.workflow);for(const definition of compiled.workflow.nodes.filter(n=>isAgent(n)&&n.id!=='plan')){const c=compiled.nodeConfigs[definition.id],selection=c.selection;run.nodes[definition.id]={id:definition.id,name:definition.name,phase:definition.phase,status:'pending',conversationId:randomUUID(),handle:null,output:'',cursor:null,since:null,fatal:null,profileId:c.profileId,profileLabel:c.profileLabel,server:c.server,workspace:c.workspace.replace(/\/$/,'')+'/runs/'+id+'/'+definition.id,modelUsed:selection?.model||c.acpModel||c.model,modelSelection:selection||null,modelRequested:selection?.model,reasoningEffort:selection?.effort,...(c.runtimeContext?{runtimeContextRequested:c.runtimeContext}:{}),dependencies:deps[definition.id],inputReady:false,outputReady:false}}
+  const deps=dependencies(compiled.workflow);for(const definition of compiled.workflow.nodes.filter(n=>isAgent(n)&&n.id!=='plan')){const c=compiled.nodeConfigs[definition.id],selection=c.selection;if(definition.artifactOnly){run.nodes[definition.id]={id:definition.id,name:definition.name,artifactOnly:true,sourceNodeId:'plan',status:'pending',modelCompleted:true,outputReady:false,dependencies:['plan'],conversationId:run.nodes.plan.conversationId};continue}run.nodes[definition.id]={id:definition.id,name:definition.name,phase:definition.phase,status:'pending',conversationId:randomUUID(),handle:null,output:'',cursor:null,since:null,fatal:null,profileId:c.profileId,profileLabel:c.profileLabel,server:c.server,workspace:c.workspace.replace(/\/$/,'')+'/runs/'+id+'/'+definition.id,modelUsed:selection?.model||c.acpModel||c.model,modelSelection:selection||null,modelRequested:selection?.model,reasoningEffort:selection?.effort,...(c.runtimeContext?{runtimeContextRequested:c.runtimeContext}:{}),dependencies:deps[definition.id],inputReady:false,outputReady:false}}
   if(run.schedulingVersion===1)run.scheduling=freezeSchedule(compiled.stages,compiled.nodeConfigs,executionHistory(this.store,bundle.teamProfiles));
   run.workflow=compiled.workflow;run.order=compiled.workflow.nodes.filter(isAgent).map(n=>n.id);run.maxParallelNodes=compiled.workflow.maxParallelNodes;run.adaptivePlan={status:'applied',plannerId:'plan',sha256:createHash('sha256').update(JSON.stringify(plan)).digest('hex'),appliedAt:new Date().toISOString(),...compiled.summary};
   this.store.db.exec('BEGIN IMMEDIATE');try{this.store.setConfig(id,{...bundle,nodeConfigs:compiled.nodeConfigs});this.store.saveRun(run);this.store.db.exec('COMMIT')}catch(error){this.store.db.exec('ROLLBACK');throw error}
+  publishCoordinatorResult(this,id);
   this.log(id,'workflow',compiled.summary.directDelivery?'规划 AI 已直接完成需求，成果文件通过快照校验，无需另开实现调用。':'AI 已按需求决定 '+compiled.stages.length+' 个协作阶段；以实际实现为主，仅保留必要检查。分工依据：'+plan.decisions,{success:true});
  }
  async archiveFor(run,node){
-  if(node.checkpoint&&this.storage?.config().enabled)return this.storage.restoreCheckpoint(node.checkpoint,{reuseVerified:true});
+  const checkpoint=dataCheckpoint(run,node);if(checkpoint&&this.storage?.config().enabled)return this.storage.restoreCheckpoint(checkpoint,{reuseVerified:true});
   const path=join(this.handoffDirectory,'parallel',run.id,node.id+'.tar.gz');try{if((await stat(path)).size)return path}catch{}
   throw new ApiError('分支快照丢失，请先恢复对象存储阶段文件。',409);
  }
  ancestors(run,id){const result=new Set([id]);for(const p of run.nodes[id]?.dependencies||[])for(const a of this.ancestors(run,p))result.add(a);return result}
  async inputFor(run,node){
+  if(node.id==='plan'&&run.streamingPlan?.checkpoint){const archive=await this.storage.restoreCheckpoint(run.streamingPlan.checkpoint,{reuseVerified:true});return mergeArchives({runId:run.id,nodeId:node.id,directory:this.handoffDirectory,cacheKey:'coordinator-resume-'+node.conversationId,parents:[{id:'committed-plan',archive}],base:archive,baseId:'committed-plan'})}
   if(node.planRepair?.version===1){
    const source=await this.archiveFor(run,node.planRepair.source),folder=join(this.handoffDirectory,'parallel',run.id),path=join(folder,node.id+'-repair-'+node.planRepair.generation+(node.fallbackCount?'-fallback-'+node.fallbackCount:'')+'-input.tar.gz');
    const report=await archiveOperation('repair',path,[],{runId:run.id,nodeId:node.id,archive:source,source:node.planRepair.source,repository:run.repositorySource,scheduler:{version:run.schedulerVersion,maxParallelNodes:run.maxParallelNodes}});return {path,report};
@@ -175,7 +179,7 @@ export class Engine extends SerialEngine {
   if(!baseId&&run.workflow?.baseRunId&&!previous)throw new ApiError('上轮成果导入尚未配置，未启动 AI。',409);
   if(!baseId&&!run.workflow?.baseRunId&&run.workflow?.repository&&!repository)throw new ApiError('仓库源代码导入尚未配置，未启动 AI。',409);
   const archives=await Promise.all(parents.map(async parent=>({id:parent.id,archive:await this.archiveFor(run,parent)}))),base=baseId?(archives.find(p=>p.id===baseId)?.archive||await this.archiveFor(run,run.nodes[baseId])):undefined;
-  const describe=p=>({id:p.id,name:p.name,profileId:p.profileId,server:p.server,model:p.modelUsed,conversationId:p.conversationId,submittedAt:p.submittedAt,finishedAt:p.finishedAt,checkpoint:p.checkpoint||null});
+  const describe=p=>({id:p.id,name:p.name,profileId:p.profileId,server:p.server,model:p.modelUsed,conversationId:p.conversationId,submittedAt:p.submittedAt,finishedAt:p.finishedAt,checkpoint:dataCheckpoint(run,p)||null});
   const sources=parents.map(describe),lineage=run.order.filter(id=>sets.some(s=>s.has(id))).map(id=>describe(run.nodes[id]));
   return mergeArchives({runId:run.id,nodeId:node.id,directory:this.handoffDirectory,cacheKey:node.fallbackCount?node.id+'-attempt-'+(node.fallbackCount+1):node.id,parents:archives,base:base||previous?.path||repository?.path,baseId:baseId||(previous?'previous-run':repository?'repository':undefined),sources,lineage,sourceRun:previous?{id:previous.metadata.sourceRunId,sha256:previous.metadata.archiveSha256}:run.artifactSource?{id:run.artifactSource.sourceRunId,sha256:run.artifactSource.archiveSha256}:undefined,repository:repository?.metadata||run.repositorySource,scheduler:{version:run.schedulerVersion,maxParallelNodes:run.maxParallelNodes}});
  }
@@ -203,11 +207,11 @@ export class Engine extends SerialEngine {
     const definition=run.workflow.nodes.find(n=>n.id===node.id),parents=run.workflow.coordinationPolicy==='lean'?compactHandoffs(node.dependencies.map(p=>this.store.run(id).nodes[p])):node.dependencies.map(p=>this.store.run(id).nodes[p]).filter(n=>n.output).map(n=>'【'+n.name+' 的交接信息】\n'+n.output.slice(-18000)).join('\n\n');
     if(config.selection?.mode==='auto'&&['auto','planner'].includes(config.selection.source)&&node.mergeReport?.conflicts?.length){config={...config,selection:chooseModel(config,{...definition,modelPolicy:undefined},{...run.workflow,taskComplexity:'complex'},config.policyModels)};config.selection.reason+=' · 文件冲突升级';const latest=this.store.config(id);latest.nodeConfigs[node.id]=config;this.store.setConfig(id,latest);node.modelSelection=config.selection;node.modelRequested=config.selection.model;node.reasoningEffort=config.selection.effort;this.patchNode(id,node)}
     const conflictInstructions=node.mergeReport?.conflicts?.length?'\n\n存在文件冲突，先读取 .canvas-collaboration/handoff.json。各分支文件完整保存在 .canvas-collaboration/inputs/<parent>/<path>，基线在 .canvas-collaboration/base/。请整合解决，禁止忽略冲突；写 .canvas-collaboration/resolutions.json：{"resolutions":{"相对路径":{"source":"custom 或 parent ID 或 base 或 delete","sha256":"最终文件真实SHA-256（删除用null）","reason":"解决原因"}}}}。每个冲突路径必须有记录，整合后用 sha256sum 校验。':'';
-    const collaborationInstructions=node.id==='plan'&&run.adaptivePlan?.status==='pending'?planningInstructions(bundle.teamProfiles,run.workflow,executionHistory(this.store,bundle.teamProfiles),traceObservations(bundle.teamProfiles)):'';
+    const collaborationInstructions=node.id==='plan'&&run.adaptivePlan?.status==='pending'?planningInstructions(bundle.teamProfiles,{...run.workflow,streamingPlanEnabled:run.streamPlanVersion===1},executionHistory(this.store,bundle.teamProfiles),traceObservations(bundle.teamProfiles)):'';
     const previous=this.store.run(id).artifactSource,source=this.store.run(id).repositorySource,repositoryInstructions=previous?'\n\n上一轮成功运行 '+previous.sourceRunId+' 的完整成果已按 SHA-256 校验并装入当前目录。基于已有代码和测试完成本次增量需求，保留无关行为及文件；不重复生成整个项目。':source?'\n\n仓库源代码已按提交 '+source.commitSha+' 装入当前目录，来源 '+source.repository+'（'+source.ref+'）。基于此快照实现需求，保留无关文件；仓库凭据由控制器管理。':'';
     const deliveryInstructions=run.deliveryCheck?'\n\n引擎会在全部实现完成后执行指定检查：'+run.deliveryCheck.policy.command+'。最终这项检查由引擎执行，避免重复运行；实际失败会提供具体输出做定点修复。':'';
     const repairInstructions=node.planRepair?'\n\n上一轮规划未通过校验：'+node.planRepair.error+'。已将经过校验的已有成果加载到此隔离目录；原计划（如有）保存在 .canvas-collaboration/rejected-plan.json。保留已有实现，针对这个错误修正 plan.json 及确有缺失的交付文件，不重新生成整个项目，不另设审查。':'';
-    const prompt='你是自托管引擎派发的执行分支，接入已完成；直接在本次隔离目录完成给定职责。协作分工通过本次 plan.json 交给引擎派发。'+(collaborationInstructions?collaborationInstructions+'\n\n':'')+'\n\n用户任务：\n'+run.workflow.task+'\n\n你的职责：\n'+definition.prompt+(parents?'\n\n'+parents:'')+'\n\n你在隔离的分支工作目录：'+node.workspace+'。其他 AI 可能同时工作；只修改自己负责的文件，不修改用户其他目录。上游文件已经合并到此目录，交接元数据在 .canvas-collaboration/handoff.json。保留上游内容，给出文件、接口契约与下游注意事项。'+repositoryInstructions+conflictInstructions+repairInstructions+deliveryInstructions;
+    const prompt='你是自托管引擎派发的执行分支，接入已完成；直接在本次隔离目录完成给定职责。协作分工通过本次 plan.json 交给引擎派发。'+(collaborationInstructions?collaborationInstructions+'\n\n':'')+'\n\n用户任务：\n'+run.workflow.task+'\n\n你的职责：\n'+definition.prompt+(parents?'\n\n'+parents:'')+'\n\n你在隔离的分支工作目录：'+node.workspace+'。其他 AI 可能同时工作；只修改自己负责的文件，不修改用户其他目录。上游文件已经合并到此目录，交接元数据在 .canvas-collaboration/handoff.json。保留上游内容，给出文件、接口契约与下游注意事项。'+repositoryInstructions+conflictInstructions+repairInstructions+deliveryInstructions+(run.streamPlanVersion===1&&node.id==='plan'?'\n当前运行请求 ID：'+node.conversationId:'');
     this.log(id,node.id,'正在并行提交至 '+(node.profileLabel||node.profileId)+'。');node.submittedAt??=new Date().toISOString();this.patchNode(id,node);
     try{node.handle=await startConversation({...config,workspace:node.workspace},{conversationId:node.conversationId,prompt,system:run.workflow.coordinationPolicy==='lean'?'你是引擎调度的执行分支，在当前目录直接完成给定职责；协作分工通过本次 plan.json 交给引擎派发。优先实现需求，说明简短，必要验证一次。':definition.prompt,model:definition.liveModel,temperature:definition.temperature,tools:definition.tools,repository:run.workflow.repository,branch:run.workflow.branch,maxIterations:run.workflow.maxIterations})}
     catch(error){let recovered;try{recovered=await conversation(config,node.conversationId)}catch{}if(recovered)node.handle={kind:'conversation',id:recovered.id,conversationId:recovered.id};else throw error}
@@ -259,11 +263,11 @@ export class Engine extends SerialEngine {
  }
  async persistDagStage(id,node,config,archive){
   const run=this.store.run(id),inputStored=await this.saveInput(id,node);if(!inputStored.ok)throw inputStored.error;
-  try{archive??=node.snapshotReady?await this.archiveForLocal(run,node,config):await captureNode(config,node,id,this.handoffDirectory);const validation=await validateMerge(archive,id,{...node.mergeReport,selection:node.modelSelection?{model:node.modelSelection.model,effort:node.modelSelection.effort,requestId:node.conversationId}:null});node.modelUsage=validation.modelUsage||null}
+  try{archive??=node.snapshotReady?await this.archiveForLocal(run,node,config):await captureNode(config,node,id,this.handoffDirectory);const validation=await validateMerge(archive,id,{...node.mergeReport,selection:node.modelSelection?{model:node.modelSelection.model,effort:node.modelSelection.effort,requestId:node.conversationId}:null});node.modelUsage=validation.modelUsage||null;const frozen=this.store.run(id).streamingPlan;if(node.id==='plan'&&frozen)await checkCommittedPlan(archive,id,frozen)}
   catch(error){if(error.status===400){node.modelCompleted=false;node.status='failed';node.snapshotReady=false;this.patchNode(id,node)}throw error}
   if(this.closed)return;node.snapshotReady=true;node.snapshotReadyAt??=new Date().toISOString();this.patchNode(id,node);
   if(this.storage?.config().enabled){node.checkpoint=await this.storage.checkpoint(run,node,config,{archivePath:archive});if(this.closed)return}
-  node.outputReady=true;node.outputReadyAt=new Date().toISOString();node.error=null;if(node.modelSelection){node.selectionApplied=true;node.reasoningEffortUsed=node.modelSelection.effort}this.patchNode(id,node);this.log(id,node.id,this.storage?.config().enabled?'阶段快照已写入数据桶，下游依赖已解锁。':'阶段快照已校验，下游依赖已解锁。',{success:true});
+  node.outputReady=true;node.outputReadyAt=new Date().toISOString();node.error=null;if(node.modelSelection){node.selectionApplied=true;node.reasoningEffortUsed=node.modelSelection.effort}this.patchNode(id,node);if(node.id==='plan')publishCoordinatorResult(this,id);this.log(id,node.id,this.storage?.config().enabled?'阶段快照已写入数据桶，下游依赖已解锁。':'阶段快照已校验，下游依赖已解锁。',{success:true});
  }
  async readSelectionReceipt(config,node){try{const r=await fetch(config.baseUrl+'/api/file/download?'+new URLSearchParams({path:node.workspace+'/.canvas-collaboration/runtime-selection.json'}),{headers:{'X-Session-API-Key':config.apiKey},redirect:'manual',signal:AbortSignal.timeout(5000)});if(!r.ok)return null;const text=await r.text();if(text.length>16000)return null;const v=JSON.parse(text);return v.requestId===node.conversationId&&v.model===node.modelSelection.model&&v.effort===node.modelSelection.effort&&v.modelApplied===true&&v.effortApplied===true?v:null}catch{return null}}
  async archiveForLocal(run,node,config){const path=join(this.handoffDirectory,'parallel',run.id,node.id+'.tar.gz');try{if((await stat(path)).size)return path}catch{}return captureNode(config,node,run.id,this.handoffDirectory)}
