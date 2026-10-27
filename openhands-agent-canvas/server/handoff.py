@@ -1,4 +1,5 @@
 import sys,tarfile,json,posixpath,hashlib,io,os,shutil,tempfile,atexit,gzip
+from text_merge import merge_text,MAX_BYTES,WORK_BUDGET
 
 # Keep aggregate payload memory bounded across the common base and every parent.
 # Larger content shares one spool file per archive; comparisons use size + SHA-256.
@@ -15,6 +16,14 @@ class Content:
  def read(self):
   with self.open() as file:return file.read(self.size)
 def raw(value):return value.read() if isinstance(value,Content) else value
+def merged_content(data,mode):
+ global memory_used
+ sha=hashlib.sha256(data).hexdigest()
+ if memory_used+len(data)<=MEMORY_LIMIT:
+  memory_used+=len(data);return Content(len(data),sha,data=data,mode=mode)
+ path=os.path.join(scratch.name,'merged-'+str(len(os.listdir(scratch.name))))
+ with open(path,'wb') as output:output.write(data)
+ return Content(len(data),sha,path=path,offset=0,mode=mode)
 
 def safe(name):
  return bool(name) and not name.startswith('/') and not any(x in ('.','..','') for x in name.split('/')) and not any(ord(c)<32 or ord(c)==127 for c in name)
@@ -93,7 +102,7 @@ elif mode=='repair':
  out['.canvas-collaboration/handoff.json']=(json.dumps(report,ensure_ascii=False,indent=2)+'\n').encode()
  write(archive,root,out);print(json.dumps(report))
 elif mode=='merge':
- spec=json.load(sys.stdin);root=spec['runId'];base=load(spec['base'],root,False) if spec.get('base') else {};parents={p['id']:load(p['archive'],root,False) for p in spec['parents']};out={};conflicts=[]
+ spec=json.load(sys.stdin);root=spec['runId'];base=load(spec['base'],root,False) if spec.get('base') else {};parents={p['id']:load(p['archive'],root,False) for p in spec['parents']};out={};conflicts=[];auto_merged=[];text_budget={'remaining':WORK_BUDGET}
  for path in sorted(set(base).union(*(set(f) for f in parents.values()))):
   original=base.get(path);versions={k:f.get(path) for k,f in parents.items()};changed={k:v for k,v in versions.items() if v!=original};unique=set(changed.values())
   if not changed:
@@ -102,6 +111,11 @@ elif mode=='merge':
    value=next(iter(unique))
    if value is not None:out[path]=value
   else:
+   merged=None
+   if spec.get('textMergeVersion')==1 and original is not None and len(original)<=MAX_BYTES and all(v is not None and len(v)<=MAX_BYTES and v.mode==original.mode for v in changed.values()):
+    merged=merge_text(raw(original),[raw(v) for v in sorted(unique,key=lambda v:v.sha)],text_budget)
+   if merged is not None:
+    out[path]=merged_content(merged,original.mode);auto_merged.append({'path':path,'algorithm':'base-line-edits-v1','baseSha256':original.sha,'sha256':digest(out[path]),'parents':[{'id':k,'sha256':digest(v)} for k,v in versions.items()]});continue
    variants=[]
    for k,value in versions.items():
     target='.canvas-collaboration/inputs/'+k+'/'+path
@@ -121,6 +135,7 @@ elif mode=='merge':
   value=out.pop(path);target='.canvas-collaboration/structural/'+hashlib.sha256(path.encode()).hexdigest();out[target]=value
   conflicts.append({'path':path,'structural':True,'variants':[{'parent':'merged','sha256':digest(value),'deleted':False,'path':target}]})
  report={'schemaVersion':1,'runId':root,'nodeId':spec['nodeId'],'base':spec.get('baseId'),'parents':[p['id'] for p in spec['parents']],'conflicts':conflicts,'sources':spec.get('sources',[]),'lineage':spec.get('lineage',[]),'scheduler':spec.get('scheduler')}
+ if spec.get('textMergeVersion')==1:report.update(textMergeVersion=1,autoMerged=auto_merged)
  if spec.get('repository'):report['repository']=spec['repository']
  if spec.get('sourceRun'):report['sourceRun']=spec['sourceRun']
  out['.canvas-collaboration/handoff.json']=(json.dumps(report,ensure_ascii=False,indent=2)+'\n').encode()

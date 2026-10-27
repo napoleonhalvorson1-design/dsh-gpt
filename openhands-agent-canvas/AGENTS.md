@@ -1,5 +1,7 @@
 # OpenHands Canvas · Codex 操作指南
 
+5.28 / 插件 2.25：新的 DAG 运行冻结 textMergeVersion=1，同一共同基线的 UTF-8 文件可按互不重叠的行修改自动汇合，不另叫整合 AI。负责人仍决定职责、共享接口与必要检查；真正重叠、竞争插入、删除/修改、二进制、模式变化及超出资源限制继续保留各版与显式解决。节点 mergeReport.autoMerged / run.finalMerge 返回来源与结果哈希。历史运行不改策略；增量重建沿用来源策略。见 docs/text-merge.md，不把文本合并成功当成语义检查通过。
+
 5.27 / 插件 2.24：支持 strongest 负责人提前冻结计划与接口，经原始输入及提前快照的 SHA/桶屏障后，在原会话继续自己的实现，同时释放独立分支。是否使用由负责人选择；planCommitted 只表示可交接，负责人实际 modelCompleted/outputReady 才表示完成。artifactOnly 文件结果节点不调用模型，最终 verify/deliver 等待其完整成果。停止、重启、续跑和增量开发保留实际会话与双方文件，接口或计划变化不能静默通过。见 docs/streamed-plan.md；未测得真实任务整体 11 倍。
 
 5.26：实际需求需要最终命令时，可设置 deliveryValidation={command,timeoutSeconds:60,autoRepair:true}（默认不配置，不例行增加验收）。全部成果经 SHA/桶屏障后在独立目录执行，真实失败才由原已验证强负责人继承成果定点修复一次，再跑同一检查；第二次失败停止。查看 run.deliveryCheck 的回执及修复计数。连接异常不触发 AI 修复，命令或模型的完成回执跨恢复保留。MCP start 支持单次覆盖，CLI 使用 --validation-file；依赖准备写入检查命令。详见 docs/delivery-validation.md。

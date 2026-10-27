@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-27T01:31:00.945541+00:00",
+  "method": "Read existing native Codex JSONL records bound by unique workspace and request/model/effort receipt. Numeric timestamps, counters and normalized tool names only. No inference or state changes.",
+  "correction": "The earlier diagnostic compared filesystem mtime seconds with submittedAt milliseconds. That filter falsely reported trace-not-found; this recheck uses matching millisecond units.",
+  "scope": "5.25 first coordinator only, excluding later repair and manual wait; 5.26 complete coordinator. Gaps include provider/native scheduling and output generation, not pure decoding.",
+  "runs": [
+    {
+      "id": "engine-performance-5-25-20261027-r1",
+      "trace": {
+        "available": true,
+        "binding": "unique-workspace-and-request-receipt",
+        "recordsComplete": true,
+        "firstRecordMs": 1793058370930,
+        "lastRecordMs": 1793058442498,
+        "observedToolUnionMs": 516,
+        "toolCalls": 3,
+        "steps": [
+          {
+            "tool": "other",
+            "beforeToolMs": null,
+            "timeMs": 1793058375068
+          },
+          {
+            "tool": "other",
+            "beforeToolMs": 2207,
+            "timeMs": 1793058377605
+          },
+          {
+            "tool": "other",
+            "beforeToolMs": 61991,
+            "timeMs": 1793058439663
+          }
+        ],
+        "lastCumulativeTokens": {
+          "input_tokens": 100047,
+          "cached_input_tokens": 83456,
+          "output_tokens": 4468,
+          "reasoning_output_tokens": 233,
+          "total_tokens": 104515
+        },
+        "scope": "numeric records only; gaps include provider and native scheduling, not pure generation"
+      }
+    },
+    {
+      "id": "engine-performance-5-26-20261027-r1",
+      "trace": {
+        "available": true,
+        "binding": "unique-workspace-and-request-receipt",
+        "recordsComplete": true,
+        "firstRecordMs": 1793061287216,
+        "lastRecordMs": 1793061403079,
+        "observedToolUnionMs": 266,
+        "toolCalls": 3,
+        "steps": [
+          {
+            "tool": "other",
+            "beforeToolMs": null,
+            "timeMs": 1793061292675
+          },
+          {
+            "tool": "other",
+            "beforeToolMs": 16950,
+            "timeMs": 1793061309704
+          },
+          {
+            "tool": "other",
+            "beforeToolMs": 88510,
+            "timeMs": 1793061398288
+          }
+        ],
+        "lastCumulativeTokens": {
+          "input_tokens": 104468,
+          "cached_input_tokens": 86912,
+          "output_tokens": 4970,
+          "reasoning_output_tokens": 206,
+          "total_tokens": 109438
+        },
+        "scope": "numeric records only; gaps include provider and native scheduling, not pure generation"
+      }
+    }
+  ],
+  "conclusion": "Known tool execution is under one second in each coordinator. The dominant model interval cannot be removed by speeding up tool commands alone. Use parallel implementation where task ownership permits; no whole-task 11x result is established."
+}
