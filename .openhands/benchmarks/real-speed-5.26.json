@@ -1,0 +1,110 @@
+{
+  "objective": "Improve capability and whole-task speed by 1000% (11x)",
+  "goalAchieved": false,
+  "engineVersion": "5.26.0",
+  "sourceCommit": "17d2db002e0730eb26803d8c5671f10ef7f4ca70",
+  "taskSha256": "6fb10cff334298c533dcced530f704e7e39423e6c746d6412ab536ed9c2e6922",
+  "scope": "Exact original task text, real strongest-coordinator development, native files, real S3 barriers and the configured final common acceptance command; no operator feedback gap and no repair was needed in this run.",
+  "run": {
+    "id": "engine-performance-5-26-20261027-r1",
+    "status": "succeeded",
+    "createdAt": "2026-10-27T00:34:45.093Z",
+    "finishedAt": "2026-10-27T00:36:50.241Z",
+    "elapsedMs": 125148,
+    "directDelivery": true,
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "selectionApplied": true,
+    "modelUsage": {
+      "schemaVersion": 1,
+      "requestId": "b454d42f-b9e4-4c00-9cd3-1b5027c3ec94",
+      "model": "gpt-6-astra",
+      "effort": "medium",
+      "scope": "acp-prompts-including-tools",
+      "elapsedMs": 115900,
+      "completedPrompts": 1,
+      "stopReason": "end_turn",
+      "tokens": {
+        "totalTokens": 109438,
+        "inputTokens": 17556,
+        "cachedReadTokens": 86912,
+        "cachedWriteTokens": 0,
+        "outputTokens": 4970,
+        "thoughtTokens": 206
+      }
+    },
+    "checkpoint": {
+      "key": "openhands-canvas/performance/engine-performance-5-26-20261027-r1/runs/engine-performance-5-26-20261027-r1/stages/plan/workspace.tar.gz",
+      "bucket": "zzx123-u1aya4fk",
+      "endpoint": "https://s3.7caiyun.com",
+      "runId": "engine-performance-5-26-20261027-r1",
+      "nodeId": "plan",
+      "conversationId": "b454d42f-b9e4-4c00-9cd3-1b5027c3ec94",
+      "sha256": "861042422669d0d96dfc04c86ae87793d016b4acce3f98a35484906a1d072f7b",
+      "size": 6542,
+      "capturedAt": "2026-10-27T00:36:43.332Z",
+      "historical": false
+    }
+  },
+  "deliveryCheck": {
+    "status": "passed",
+    "exitCode": 0,
+    "nativeCommandElapsedMs": 42,
+    "requestId": "73cc1062-f975-44a1-ad0f-9ecd43332105",
+    "artifactSha256": "861042422669d0d96dfc04c86ae87793d016b4acce3f98a35484906a1d072f7b",
+    "commandSha256": "5eade48856215b020a00e4a7bbe9daaa2ac20322b27e9db091771ef8a2e3c7c3",
+    "repairCount": 0,
+    "autoRepairCount": 0,
+    "checksPassed": 10,
+    "checksTotal": 10,
+    "ownTestsPassed": true
+  },
+  "timing": {
+    "modelIntervalMs": 117631,
+    "modelRatio": 0.939935,
+    "remainingWallMs": 7517,
+    "finalCheckNativeMs": 42
+  },
+  "comparison": {
+    "historicalBaselineVersion": "5.6.0",
+    "historicalBaselineRunMs": 488052,
+    "currentMs": 125148,
+    "speedFactor": 3.8998,
+    "speedIncreasePercent": 289.98,
+    "earlier525IncludingRepairAndFeedbackMs": 341860,
+    "requestedSpeedFactor": 11,
+    "requiredElapsedMsFor11x": 44368.364,
+    "achieved": false
+  },
+  "conditionalCeiling": {
+    "condition": "If this observed model interval stays fixed, even removing all remaining wall time does not reach the goal. This is not a claim that the model interval itself cannot be optimized.",
+    "currentOverheadOnlySpeedCeiling": 1.0639,
+    "baselineRelativeCeilingAtFixedModelInterval": 4.149
+  },
+  "limitations": [
+    "One sequential sample against a historical baseline; model service load, caches and outputs are uncontrolled.",
+    "The original task text hash is identical, but 5.26 also exposes the explicit final contract command to the coordinator. This is an engine capability/configuration difference, not a blind controlled model comparison.",
+    "First-pass acceptance succeeded; this run does not measure the automatic repair branch or causally prove its latency benefit.",
+    "Model interval includes native startup, tools, provider waits, reasoning and generation. Fine-grained persistent Codex trace was unavailable; do not attribute it solely to decoding.",
+    "Ten shared checks and the generated artifacts own tests are evidence, not exhaustive equivalence.",
+    "Independent post-run extraction/checks and GitHub CI time are outside engine run clocks.",
+    "No universal speedup or whole-goal 11x claim."
+  ],
+  "artifactFiles": [
+    {
+      "path": ".openhands/benchmarks/artifacts/5.26/shared/run-performance.mjs",
+      "sha256": "7c5480728c5d3261df91e68fc694cc8d1355d9a2c434bd1d2afa8f0823e60d94",
+      "bytes": 6254
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.26/scripts/test-run-performance.mjs",
+      "sha256": "4aec860209d8184bbdba81e585bd45c8e2cfc2c476399a5539f1715ba46990cb",
+      "bytes": 3907
+    },
+    {
+      "path": ".openhands/benchmarks/artifacts/5.26/docs/run-performance.md",
+      "sha256": "35aa21cb067ef267511b3e0a5413a133a10b65cdc6b7c23c85bf588021a71ed6",
+      "bytes": 3750
+    }
+  ]
+}

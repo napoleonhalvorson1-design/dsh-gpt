@@ -28,7 +28,8 @@ jobs:
         run: |
           node .openhands/benchmarks/artifacts/5.6/scripts/test-run-performance.mjs
           node .openhands/benchmarks/artifacts/5.25-fixed/scripts/test-run-performance.mjs
-          node .openhands/benchmarks/real-development-contract.mjs .openhands/benchmarks/artifacts/5.6/shared/run-performance.mjs .openhands/benchmarks/artifacts/5.25-fixed/shared/run-performance.mjs
+          node .openhands/benchmarks/artifacts/5.26/scripts/test-run-performance.mjs
+          node .openhands/benchmarks/real-development-contract.mjs .openhands/benchmarks/artifacts/5.6/shared/run-performance.mjs .openhands/benchmarks/artifacts/5.25-fixed/shared/run-performance.mjs .openhands/benchmarks/artifacts/5.26/shared/run-performance.mjs
 
   engine-ci:
     name: engine-ci
