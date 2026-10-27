@@ -20,7 +20,7 @@ const packScript=`import sys,json,tarfile,io
 spec=json.loads(sys.argv[2])
 with tarfile.open(sys.argv[1],'w:gz') as tar:
  for item in spec:
-  entry=tarfile.TarInfo(item['path'])
+  entry=tarfile.TarInfo(item['path']);entry.mode=item.get('mode',0o644)
   if item.get('symlink'):
    entry.type=tarfile.SYMTYPE;entry.linkname=item['symlink'];tar.addfile(entry)
   else:
@@ -35,8 +35,8 @@ async function contents(path){
  const result=await execute('python3',['-c',"import sys,tarfile,json\nwith tarfile.open(sys.argv[1],'r:gz') as t: print(json.dumps({m.name:t.extractfile(m).read().decode() for m in t if m.isfile()}))",path]);
  return JSON.parse(result.stdout);
 }
-async function merge(parents,base){
- return mergeArchives({runId:'run',nodeId:'join-'+(++serial),directory,parents:await Promise.all(parents.map(async(files,i)=>({id:'parent-'+i,archive:await archive(files)}))),...(base?{base:await archive(base),baseId:'base'}:{})});
+async function merge(parents,base,textMergeVersion){
+ return mergeArchives({runId:'run',nodeId:'join-'+(++serial),directory,textMergeVersion,parents:await Promise.all(parents.map(async(files,i)=>({id:'parent-'+i,archive:await archive(files)}))),...(base?{base:await archive(base),baseId:'base'}:{})});
 }
 async function waitFor(predicate,message){
  const deadline=Date.now()+5000;
@@ -79,6 +79,15 @@ try{
  const identical=await merge([{'same.txt':'same edit'},{'same.txt':'same edit'}],{'same.txt':'old'});
  check(!identical.report.conflicts.length,'Identical edits on separate branches are not conflicts');
  check((await contents(identical.path))['run/same.txt']==='same edit','Identical edits retain the shared new contents');
+ const common='export const one = 0;\n\nexport const two = 0;\n',left=common.replace('one = 0','one = 1'),right=common.replace('two = 0','two = 2'),combined=common.replace('one = 0','one = 1').replace('two = 0','two = 2');
+ const clean=await merge([{'module.js':left},{'module.js':right}],{'module.js':common},1),cleanFiles=await contents(clean.path);check(clean.report.conflicts.length===0&&cleanFiles['run/module.js']===combined,'N-way base-relative disjoint edits preserve both worker implementations');check(clean.report.autoMerged[0].sha256===digest(combined)&&clean.report.autoMerged[0].baseSha256===digest(common)&&clean.report.autoMerged[0].parents.length===2,'Automatic merge records result and source hashes without code in the report');await validateMerge(clean.path,'run',clean.report);
+ const reverse=await merge([{'module.js':right},{'module.js':left}],{'module.js':common},1);check((await contents(reverse.path))['run/module.js']===combined,'Clean merge result does not depend on branch order');
+ const legacyText=await merge([{'module.js':left},{'module.js':right}],{'module.js':common});check(legacyText.report.conflicts.length===1&&!legacyText.report.autoMerged,'Historical policy still requires explicit same-file resolution');
+ const overlapText=await merge([{'module.js':left},{'module.js':common.replace('one = 0','one = 9')}],{'module.js':common},1);check(overlapText.report.conflicts.length===1&&overlapText.report.autoMerged.length===0,'Competing lines retain explicit conflict handling');await assert.rejects(validateMerge(overlapText.path,'run',overlapText.report),/resolutions.json/);checks++;
+ const modeA=await archive({},[{path:'run/module.js',text:left,mode:0o755}]),modeB=await archive({'module.js':right}),modeBase=await archive({'module.js':common});const modeConflict=await mergeArchives({runId:'run',nodeId:'mode-conflict',directory,parents:[{id:'left',archive:modeA},{id:'right',archive:modeB}],base:modeBase,textMergeVersion:1});check(modeConflict.report.conflicts.length===1,'Executable mode changes do not get silently mixed with another branch edit');
+ const noBase=await merge([{'module.js':left},{'module.js':right}],undefined,1);check(noBase.report.conflicts.length===1,'Concurrent creation without a common file cannot select an arbitrary winner');
+ const byteConflict=await merge([{'binary':left+'\0'},{'binary':right+'\0'}],{'binary':common+'\0'},1);check(byteConflict.report.conflicts.length===1,'Binary contents retain all variants');
+ const deleteText=await merge([{}, {'module.js':right}],{'module.js':common},1);check(deleteText.report.conflicts.length===1,'Deletion versus modification remains explicit under the new policy');
  const deleteUnchanged=await merge([{}, {'gone.txt':'old'}],{'gone.txt':'old'});
  check(!deleteUnchanged.report.conflicts.length&&!Object.hasOwn(await contents(deleteUnchanged.path),'run/gone.txt'),'An unchanged sibling cannot restore a deleted file');
 

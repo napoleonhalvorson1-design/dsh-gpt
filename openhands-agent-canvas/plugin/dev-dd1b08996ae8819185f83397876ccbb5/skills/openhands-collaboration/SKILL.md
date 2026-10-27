@@ -159,3 +159,7 @@ DeepSeek 阶段等待较长时，用 canvas_run_status 的 view=trace、nodeId�
 ## 负责人和分支并行实现（5.27 / 插件 2.24）
 
 新的 strongest 自主运行在入口支持时允许负责人提前冻结计划与接口并写入数据桶，然后在同一会话继续实现自己的文件；独立 AI 可提前开工。由负责人决定是否使用，不强制分工或额外模型调用。run.streamingPlan 表示实际冻结成功，plan.planCommitted 不代表负责人已完成；最终测试和交付仍等全部代码与桶屏障。负责人文件结果节点 artifactOnly=true 仅引用已有成果，不是新 AI。停止、续跑及增量开发仍处理实际会话与完整文件。见 [提前交接](references/streamed-plan.md)。
+
+## 同文件独立实现的自动汇合（5.28 / 插件 2.25）
+
+新运行冻结 textMergeVersion=1；负责人可按函数或独立区域分工，共同基线已有的 UTF-8 文件中，不重叠修改自动汇合，不为此另叫整合或审查 AI。先有稳定骨架和接口，仍由最强负责人选择是否拆分。相同行、竞争插入、删除冲突、二进制或模式变化等继续显式解决，不能以文本无冲突代替必要检查。节点 mergeReport.autoMerged / run.finalMerge 给出实际汇合的来源及结果哈希；保存、重启和增量重建沿用冻结策略。见 [文本汇合](references/text-merge.md)。

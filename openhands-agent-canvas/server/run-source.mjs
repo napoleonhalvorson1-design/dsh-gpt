@@ -30,7 +30,7 @@ export function pinRunSource(store,storage,{id,projectId},flow){
  const parents=leaves.map(id=>({id,checkpoint:checkpoint(nodes[id])}));
  let base=null;
  if(leaves.length>1){if(maximal[0])base=maximal[0]==='plan'&&source.streamingPlan?.checkpoint?{id:'committed-plan',checkpoint:structuredClone(source.streamingPlan.checkpoint)}:{id:maximal[0],checkpoint:checkpoint(nodes[maximal[0]])};else if(source.workflow?.baseRunId||source.workflow?.repository){const cp=source.artifactSource?.checkpoint||source.repositorySource?.checkpoint;if(!cp)throw new ApiError('上轮源代码基线快照缺失。',409);base={id:'source',checkpoint:structuredClone(cp)}}}
- return {sourceRunId:source.id,sourceProjectId:source.projectId,parents,base,status:'pinned',pinnedAt:new Date().toISOString()};
+ return {sourceRunId:source.id,sourceProjectId:source.projectId,parents,base,textMergeVersion:source.textMergeVersion===1?1:undefined,status:'pinned',pinnedAt:new Date().toISOString()};
 }
 
 export class RunSources {
@@ -49,7 +49,7 @@ export class RunSources {
   for(const p of metadata.parents)this.check(p.checkpoint);if(metadata.base)this.check(metadata.base.checkpoint);
   if(!await matches(path,metadata.archiveSha256)){
    const parents=await Promise.all(metadata.parents.map(async p=>({id:p.id,archive:await this.restore(p.checkpoint,signal)})));let raw=parents[0]?.archive;
-   if(parents.length>1){const base=metadata.base?await this.restore(metadata.base.checkpoint,signal):undefined;const merged=await mergeArchives({runId:metadata.sourceRunId,nodeId:'previous-delivery',directory:folder,parents,base,baseId:metadata.base?.id});signal.throwIfAborted();if(merged.report.conflicts.length)throw new ApiError('上轮成果重建存在未解决冲突，未启动 AI。',409);raw=merged.path}
+   if(parents.length>1){const base=metadata.base?await this.restore(metadata.base.checkpoint,signal):undefined;const merged=await mergeArchives({runId:metadata.sourceRunId,nodeId:'previous-delivery',directory:folder,parents,base,baseId:metadata.base?.id,textMergeVersion:metadata.textMergeVersion});signal.throwIfAborted();if(merged.report.conflicts.length)throw new ApiError('上轮成果重建存在未解决冲突，未启动 AI。',409);raw=merged.path}
    const normalized=join(folder,randomUUID()+'.tar.gz');try{const report=await archiveOperation('repository',raw,[normalized,run.id]);signal.throwIfAborted();await rename(normalized,path);metadata={...metadata,archiveSha256:await digest(path),files:report.files,bytes:report.bytes,status:'prepared'};this.patch(run.id,metadata,signal)}finally{await unlink(normalized).catch(()=>{})}
   }
   const checkpoint=await this.storage.checkpoint(this.store.run(run.id),{id:RUN_SOURCE_NODE_ID,status:'succeeded',name:'上轮开发成果',conversationId:'source-'+metadata.archiveSha256,output:'Source run '+metadata.sourceRunId},{mode:'remote'},{archivePath:path});signal.throwIfAborted();
