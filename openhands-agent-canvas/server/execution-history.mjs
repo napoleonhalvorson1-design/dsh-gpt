@@ -5,7 +5,7 @@ export function executionHistory(store,team){
  for(const row of store.db.prepare("SELECT payload FROM runs WHERE status IN ('succeeded','failed','cancelled') ORDER BY created_at DESC LIMIT 50").iterate()){
   const run=JSON.parse(row.payload);
   for(const node of Object.values(run.nodes||{}).flatMap(n=>[n,...(Array.isArray(n.attempts)?n.attempts:[]).filter(a=>a.stopConfirmed).map(a=>({...a,id:n.id,phase:n.phase,status:a.outcome==='invalid-plan'?'failed':'paused',planningRejected:a.outcome==='invalid-plan',previousAttempt:true,recoveryStoppedAt:a.stoppedAt,modelSelection:{complexity:a.complexity||'unknown'}}))])){
-   const usage=node.modelUsage,profile=team[node.profileId],model=node.modelRequested,role=node.id===run.adaptivePlan?.plannerId?(run.adaptivePlan.directDelivery&&!node.previousAttempt?'direct-implementation':'planning'):node.phase||'implementation',complexity=node.modelSelection?.complexity||'unknown';
+   const usage=node.modelUsage,profile=team[node.profileId],model=node.modelRequested,role=node.id===run.adaptivePlan?.plannerId?((run.adaptivePlan.directDelivery||run.adaptivePlan.initialDirectDelivery)&&!node.previousAttempt?'direct-implementation':'planning'):node.phase||'implementation',complexity=node.modelSelection?.complexity||'unknown';
    if(profile?.policyModels?.some(m=>m.verified&&m.id===model)&&(node.status==='paused'||node.budgetRecovery?.state==='exhausted')&&node.stopConfirmed&&node.selectionApplied&&node.submittedAt&&(run.status==='cancelled'||node.recoveryStoppedAt||node.budgetRecovery?.stoppedAt)){
     const elapsed=Date.parse(node.recoveryStoppedAt||node.budgetRecovery?.stoppedAt||run.finishedAt)-Date.parse(node.submittedAt),request=JSON.stringify([node.profileId,node.conversationId]),key=JSON.stringify([node.profileId,model,node.reasoningEffort,role,complexity]);if(!Number.isSafeInteger(elapsed)||elapsed<0||seen.has(request))continue;seen.add(request);
     if(!groups.has(key))groups.set(key,{profileId:node.profileId,model,effort:node.reasoningEffort,role,complexity,times:[],tokens:[],rates:[],failed:0,invalidPlans:0,interrupted:[]});
@@ -16,6 +16,7 @@ export function executionHistory(store,team){
     if(!groups.has(key))groups.set(key,{profileId:node.profileId,model,effort:node.reasoningEffort,role,complexity,times:[],tokens:[],rates:[],failed:0,invalidPlans:0,interrupted:[]});
     const group=groups.get(key);if(node.planningRejected)group.invalidPlans++;else group.failed++;continue;
    }
+   if(run.deliveryCheck?.version===1&&(run.deliveryCheck.current?.status!=='passed'||run.deliveryCheck.attempts?.some(a=>a.status==='failed'&&a.sourceNodeIds?.length===1&&a.sourceNodeIds[0]===node.id)))continue;
    if(!node.outputReady||node.status!=='succeeded'||!node.selectionApplied||!profile?.policyModels?.some(m=>m.verified&&m.id===model))continue;
    if(usage&&(usage.scope!=='acp-prompts-including-tools'||usage.stopReason!=='end_turn'||usage.requestId!==node.conversationId||usage.model!==model))continue;
    const start=Date.parse(node.submittedAt),end=Date.parse(node.finishedAt),elapsed=end-start;

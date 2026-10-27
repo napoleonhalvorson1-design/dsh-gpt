@@ -4,12 +4,13 @@ import {ApiError,cleanText,validateConfig,upstream,conversation,eventSummary,sta
 import {validateModelPolicy} from '../shared/model-policy.mjs';
 import {validateExecutionPolicy} from './execution-policy.mjs';
 import {validateRuntimeContext} from './runtime-context.mjs';
+import {validateDeliveryValidation} from '../shared/delivery-validation.mjs';
 export const ACTIVE=new Set(['queued','running','reconnecting','stopping']);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const safeId=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,100}$/.test(value);
 export function validateWorkflow(input){
   if(!input||typeof input.title!=='string'||!Array.isArray(input.nodes)||!Array.isArray(input.edges)||input.nodes.length>100||input.edges.length>300)throw new ApiError('工作流格式无效。');
-  validateModelPolicy(input);validateRuntimeContext(input.runtimeContext);
+  validateModelPolicy(input);validateRuntimeContext(input.runtimeContext);const deliveryValidation=validateDeliveryValidation(input.deliveryValidation);if(deliveryValidation&&input.nodes.some(n=>n?.id?.startsWith("_canvas_delivery_")))throw new ApiError("交付检查保留 _canvas_delivery_ 标识。");
   if(input.plannerPolicy!==undefined&&!["strongest","manual"].includes(input.plannerPolicy))throw new ApiError("规划模型策略无效。");
   if(input.coordinationPolicy!==undefined&&!["lean","standard"].includes(input.coordinationPolicy))throw new ApiError("协作开销设置无效。");
   if(input.collaborationMode!==undefined&&!["fixed","adaptive"].includes(input.collaborationMode))throw new ApiError("协作模式无效。");
@@ -24,7 +25,7 @@ export function validateWorkflow(input){
   const degree=new Map(nodes.map(n=>[n.id,0]));edges.forEach(([,b])=>degree.set(b,degree.get(b)+1));const queue=nodes.filter(n=>!degree.get(n.id)),order=[];
   while(queue.length){const n=queue.shift();order.push(n);for(const [a,b] of edges)if(a===n.id){degree.set(b,degree.get(b)-1);if(!degree.get(b))queue.push(nodes.find(n=>n.id===b))}}
   if(order.length!==nodes.length)throw new ApiError('工作流包含循环连接。');
-  return {title:input.title.trim().slice(0,100)||'未命名工作流',nodes,edges,task:cleanText(input.task,20000),baseRunId:input.baseRunId,repository:cleanText(input.repository,160),branch:cleanText(input.branch,150),githubConnectionId:cleanText(input.githubConnectionId,80)||undefined,executionProfile:cleanText(input.executionProfile,80),modelMode:input.modelMode,runtimeContext:input.runtimeContext,reasoningEffort:input.reasoningEffort,taskComplexity:input.taskComplexity,planningComplexity:input.planningComplexity,plannerPolicy:input.plannerPolicy,coordinationPolicy:input.coordinationPolicy,collaborationMode:input.collaborationMode,executionMode:input.executionMode==='parallel'?'parallel':'auto',maxParallelNodes:Math.min(5,Math.max(1,Math.floor(Number(input.maxParallelNodes)||5))),maxIterations:Math.min(100,Math.max(1,Number(input.maxIterations)||30)),order};
+  return {title:input.title.trim().slice(0,100)||'未命名工作流',nodes,edges,task:cleanText(input.task,20000),baseRunId:input.baseRunId,deliveryValidation,repository:cleanText(input.repository,160),branch:cleanText(input.branch,150),githubConnectionId:cleanText(input.githubConnectionId,80)||undefined,executionProfile:cleanText(input.executionProfile,80),modelMode:input.modelMode,runtimeContext:input.runtimeContext,reasoningEffort:input.reasoningEffort,taskComplexity:input.taskComplexity,planningComplexity:input.planningComplexity,plannerPolicy:input.plannerPolicy,coordinationPolicy:input.coordinationPolicy,collaborationMode:input.collaborationMode,executionMode:input.executionMode==='parallel'?'parallel':'auto',maxParallelNodes:Math.min(5,Math.max(1,Math.floor(Number(input.maxParallelNodes)||5))),maxIterations:Math.min(100,Math.max(1,Number(input.maxIterations)||30)),order};
 }
 export class Engine {
   constructor(store,{pollMs=3000,maxActive=1,handoffDirectory}={}){this.store=store;this.handoffDirectory=handoffDirectory;this.pollMs=pollMs;this.maxActive=maxActive;this.active=new Set();this.closed=false;this.timer=null}

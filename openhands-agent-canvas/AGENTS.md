@@ -1,5 +1,7 @@
 # OpenHands Canvas · Codex 操作指南
 
+5.26：实际需求需要最终命令时，可设置 deliveryValidation={command,timeoutSeconds:60,autoRepair:true}（默认不配置，不例行增加验收）。全部成果经 SHA/桶屏障后在独立目录执行，真实失败才由原已验证强负责人继承成果定点修复一次，再跑同一检查；第二次失败停止。查看 run.deliveryCheck 的回执及修复计数。连接异常不触发 AI 修复，命令或模型的完成回执跨恢复保留。MCP start 支持单次覆盖，CLI 使用 --validation-file；依赖准备写入检查命令。详见 docs/delivery-validation.md。
+
 5.25：新自主协作运行按剩余依赖路径优先占用空闲推理槽，负责人可填写阶段 estimatedSeconds（1–7200 整数秒，预计时间而非预算）。模型、深度、分工与依赖仍由负责人决定；估计及来源与计划同事务冻结在 run.scheduling，续跑不重估，未知值保持 null。文件与桶屏障不变，固定/历史运行保持原顺序。见 docs/critical-path.md。
 
 这是可真实执行任务的工作台。通过 `canvas` 命令行或此网站的 MCP 插件操作，网页、CLI 和 MCP 共享项目和后台任务。

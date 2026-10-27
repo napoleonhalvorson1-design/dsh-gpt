@@ -15,6 +15,7 @@ import {pinRunSource} from './run-source.mjs';
 import {placePlanner} from './planner-placement.mjs';
 import {preparePlanRepair} from './plan-repair.mjs';
 import {freezeSchedule,stageOrder} from './critical-path.mjs';
+import {validationConfig,validateDelivery,stopDeliveryCheck,prepareDeliveryRepair} from './delivery-validation.mjs';
 import {validateAdaptiveSeed,planningInstructions,compileAdaptivePlan,compactHandoffs,validateDirectDelivery} from './adaptive.mjs';
 export {ACTIVE,validateWorkflow};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -46,11 +47,12 @@ export class Engine extends SerialEngine {
  }
  enqueue(input,config){
   const existing=this.store.run(input.id);if(existing)return existing;
-  const flow=validateWorkflow(input.workflow);validateAdaptiveSeed(flow);const artifactSource=pinRunSource(this.store,this.storage,input,flow);const observations=config.teamProfiles?executionHistory(this.store,config.teamProfiles):[],initialPolicy=defaultPlannerPolicy(flow,config,observations);config=placePlanner(this.store,flow,config);const plannerPolicy=defaultPlannerPolicy(flow,config,observations);if(plannerPolicy&&initialPolicy)plannerPolicy.budgetSeconds=Math.max(plannerPolicy.budgetSeconds,initialPolicy.budgetSeconds);if(plannerPolicy){const definition=flow.nodes.find(n=>n.id==='plan');definition.executionPolicy=plannerPolicy;config={...config,nodeConfigs:{...config.nodeConfigs,plan:compileExecutionPolicy({...config.nodeConfigs.plan},definition,flow,config.teamProfiles)}};}if(flow.collaborationMode==='adaptive'&&!config.teamProfiles)throw new ApiError('自动协作尚未配置可用 AI 团队。',409);const deps=dependencies(flow),parallel=flow.nodes.some(n=>n.executionPolicy)||!!flow.baseRunId||!!flow.repository&&config.mode==='remote'||!!flow.modelMode||!!config.selection||Object.values(config.nodeConfigs||{}).some(c=>c.selection)||flow.executionMode==='parallel'||Object.values(deps).filter(p=>!p.length).length>1||Object.values(deps).some(p=>p.length>1)||Object.keys(deps).some(id=>Object.values(deps).filter(p=>p.includes(id)).length>1);
+  const flow=validateWorkflow(input.workflow);validateAdaptiveSeed(flow);const artifactSource=pinRunSource(this.store,this.storage,input,flow);const observations=config.teamProfiles?executionHistory(this.store,config.teamProfiles):[],initialPolicy=defaultPlannerPolicy(flow,config,observations);config=placePlanner(this.store,flow,config);const plannerPolicy=defaultPlannerPolicy(flow,config,observations);if(plannerPolicy&&initialPolicy)plannerPolicy.budgetSeconds=Math.max(plannerPolicy.budgetSeconds,initialPolicy.budgetSeconds);if(plannerPolicy){const definition=flow.nodes.find(n=>n.id==='plan');definition.executionPolicy=plannerPolicy;config={...config,nodeConfigs:{...config.nodeConfigs,plan:compileExecutionPolicy({...config.nodeConfigs.plan},definition,flow,config.teamProfiles)}};}if(flow.collaborationMode==='adaptive'&&!config.teamProfiles)throw new ApiError('自动协作尚未配置可用 AI 团队。',409);const deliveryCheck=validationConfig(flow,config);if(deliveryCheck&&!this.storage?.config().enabled)throw new ApiError("指定交付检查需要已配置的对象存储。",409);const deps=dependencies(flow),parallel=!!deliveryCheck||flow.nodes.some(n=>n.executionPolicy)||!!flow.baseRunId||!!flow.repository&&config.mode==='remote'||!!flow.modelMode||!!config.selection||Object.values(config.nodeConfigs||{}).some(c=>c.selection)||flow.executionMode==='parallel'||Object.values(deps).filter(p=>!p.length).length>1||Object.values(deps).some(p=>p.length>1)||Object.keys(deps).some(id=>Object.values(deps).filter(p=>p.includes(id)).length>1);
   if(parallel&&flow.nodes.filter(isAgent).some(n=>(config.nodeConfigs?.[n.id]||config).mode!=='remote'))throw new ApiError('并行文件协作需要自托管 OpenHands 执行入口。',409);
   this.suppressTick=true;let run,transaction=false;const atomic=!!artifactSource;
   try{if(atomic){this.store.db.exec('BEGIN IMMEDIATE');transaction=true}run=super.enqueue({...input,workflow:flow},config);
   if(artifactSource){run.artifactSource=artifactSource;this.store.saveRun(run)}
+  if(deliveryCheck){run.deliveryCheck=deliveryCheck;this.store.saveRun(run)}
   if(parallel){run.schedulerVersion=2;if(flow.collaborationMode==='adaptive'){run.adaptivePlan={status:'pending',plannerId:'plan'};run.schedulingVersion=1;if(config.nodeConfigs?.plan?.selection?.planner&&config.nodeConfigs.plan.selection.verified)run.planRepairVersion=1;}run.maxParallelNodes=flow.maxParallelNodes;run.activeNodeIds=[];run.completedCount=0;for(const [id,node] of Object.entries(run.nodes)){node.dependencies=deps[id];node.workspace+='/'+id;node.inputReady=false;node.outputReady=false}this.store.saveRun(run);this.log(run.id,'workflow','依照画布依赖并行调度，最多 '+run.maxParallelNodes+' 个 AI 同时工作；分支目录隔离，汇合前校验阶段快照。')}
   if(transaction){this.store.db.exec('COMMIT');transaction=false}}catch(error){if(transaction)this.store.db.exec('ROLLBACK');throw error}finally{this.suppressTick=false}
   this.tick();return this.store.run(run.id);
@@ -65,7 +67,7 @@ export class Engine extends SerialEngine {
   this.repositorySource?.abort(id);this.runSource?.abort(id);
   for(const [key,feed] of this.eventWakeups)if(key.startsWith(id+'/'))feed.wake();
   const old=this.store.run(id);
-  if(old?.schedulerVersion===2&&old.status==='failed'&&Object.values(old.nodes).some(n=>!n.modelCompleted&&!n.stopConfirmed&&(n.handle||n.submittedAt))){this.patch(id,r=>{r.cancelRequested=true;r.status='stopping'});this.tick();return this.store.run(id)}
+  if(old?.schedulerVersion===2&&old.status==='failed'&&(Object.values(old.nodes).some(n=>!n.modelCompleted&&!n.stopConfirmed&&(n.handle||n.submittedAt))||old.deliveryCheck?.current?.inputReady&&!['passed','failed','cancelled'].includes(old.deliveryCheck.current.status))){this.patch(id,r=>{r.cancelRequested=true;r.status='stopping'});this.tick();return this.store.run(id)}
   const run=super.stop(id);if(run.schedulerVersion===2&&run.status==='stopping')this.tick();return run;
  }
  async resume(id,config){
@@ -73,6 +75,8 @@ export class Engine extends SerialEngine {
   let run=this.store.run(id);if(!run||run.schedulerVersion!==2)return super.resume(id,config);
   if(ACTIVE.has(run.status))return run;if(run.status==='succeeded')throw new ApiError('此工作流已完成，请创建新的运行。',409);
   const old=this.store.config(id);for(const node of Object.values(run.nodes)){const a=old.nodeConfigs?.[node.id]||old,b=config.nodeConfigs?.[node.id]||config;if(a.baseUrl!==b.baseUrl)throw new ApiError('请连接此任务原来的后端后再重试。',409)}
+  if(run.deliveryCheck?.current?.status==='cancelled'){run.deliveryCheck.attempts.push(run.deliveryCheck.current);run.deliveryCheck.current=null;run.deliveryCheck.checkGeneration=(run.deliveryCheck.checkGeneration||0)+1;this.store.saveRun(run)}
+  if(run.deliveryCheck?.current?.status==='failed'){const repaired=await prepareDeliveryRepair(this,run,run.deliveryCheck.current,{manual:true});if(repaired){run=this.store.run(id);config=this.store.config(id)}}
   // A failed stage upload resumes at the checkpoint barrier, without another model request.
   for(const nodeId of Object.keys(run.nodes)){
    const node=run.nodes[nodeId];
@@ -105,7 +109,7 @@ export class Engine extends SerialEngine {
     this.patch(id,r=>{r.status='stopping';r.activeNodeIds=[...tasks.keys()]});
     // Restart recovery must also stop every previously started branch.
     for(const node of Object.values(run.nodes))if(!tasks.has(node.id)&&!this.ready(node)&&!node.modelCompleted&&!node.stopConfirmed&&(node.handle||node.submittedAt||['running','reconnecting','paused'].includes(node.status)))this.launch(id,node,tasks,true);
-    if(!tasks.size){this.patch(id,r=>{r.status='cancelled';r.error=null;r.activeNodeIds=[];r.finishedAt=new Date().toISOString()});this.log(id,'workflow','所有已启动分支均已确认停止，成功阶段已保留。');return}
+    if(!tasks.size){await stopDeliveryCheck(this,this.store.run(id));if(this.closed)return;this.patch(id,r=>{r.status='cancelled';r.error=null;r.activeNodeIds=[];r.finishedAt=new Date().toISOString()});this.log(id,'workflow','所有已启动分支均已确认停止，成功阶段已保留。');return}
    }else{
     if(run.adaptivePlan?.status==='pending'&&this.ready(run.nodes.plan)){await this.expandPlan(id);run=this.store.run(id)}
     for(const nodeId of stageOrder(run)){
@@ -121,7 +125,7 @@ export class Engine extends SerialEngine {
     if(this.store.run(id).cancelRequested)continue;
     if(!tasks.size){
      run=this.store.run(id);const values=Object.values(run.nodes),failed=values.filter(n=>n.budgetRecovery?.state!=='stopping'&&(n.status==='failed'||n.error)),paused=values.filter(n=>n.status==='paused'&&n.budgetRecovery?.state!=='stopping');
-     if(values.every(n=>this.ready(n))){await this.finalizeDag(run);return}
+     if(values.every(n=>this.ready(n))){const result=await this.finalizeDag(run);if(result?.repairPrepared||result?.pending)continue;return}
      if(failed.length){this.patch(id,r=>{r.status='failed';r.error=failed.map(n=>n.name+'：'+(n.error||'执行失败')).join('\n');r.activeNodeIds=[]});return}
      if(paused.length){this.patch(id,r=>{r.status='awaiting_input';r.error='分支等待后端确认或补充输入，处理后可继续。';r.activeNodeIds=[]});return}
      // Other workflows can hold the global slots. Keep waiting, without recording a false failure.
@@ -201,8 +205,9 @@ export class Engine extends SerialEngine {
     const conflictInstructions=node.mergeReport?.conflicts?.length?'\n\n存在文件冲突，先读取 .canvas-collaboration/handoff.json。各分支文件完整保存在 .canvas-collaboration/inputs/<parent>/<path>，基线在 .canvas-collaboration/base/。请整合解决，禁止忽略冲突；写 .canvas-collaboration/resolutions.json：{"resolutions":{"相对路径":{"source":"custom 或 parent ID 或 base 或 delete","sha256":"最终文件真实SHA-256（删除用null）","reason":"解决原因"}}}}。每个冲突路径必须有记录，整合后用 sha256sum 校验。':'';
     const collaborationInstructions=node.id==='plan'&&run.adaptivePlan?.status==='pending'?planningInstructions(bundle.teamProfiles,run.workflow,executionHistory(this.store,bundle.teamProfiles),traceObservations(bundle.teamProfiles)):'';
     const previous=this.store.run(id).artifactSource,source=this.store.run(id).repositorySource,repositoryInstructions=previous?'\n\n上一轮成功运行 '+previous.sourceRunId+' 的完整成果已按 SHA-256 校验并装入当前目录。基于已有代码和测试完成本次增量需求，保留无关行为及文件；不重复生成整个项目。':source?'\n\n仓库源代码已按提交 '+source.commitSha+' 装入当前目录，来源 '+source.repository+'（'+source.ref+'）。基于此快照实现需求，保留无关文件；仓库凭据由控制器管理。':'';
+    const deliveryInstructions=run.deliveryCheck?'\n\n引擎会在全部实现完成后执行指定检查：'+run.deliveryCheck.policy.command+'。最终这项检查由引擎执行，避免重复运行；实际失败会提供具体输出做定点修复。':'';
     const repairInstructions=node.planRepair?'\n\n上一轮规划未通过校验：'+node.planRepair.error+'。已将经过校验的已有成果加载到此隔离目录；原计划（如有）保存在 .canvas-collaboration/rejected-plan.json。保留已有实现，针对这个错误修正 plan.json 及确有缺失的交付文件，不重新生成整个项目，不另设审查。':'';
-    const prompt='你是自托管引擎派发的执行分支，接入已完成；直接在本次隔离目录完成给定职责。协作分工通过本次 plan.json 交给引擎派发。'+(collaborationInstructions?collaborationInstructions+'\n\n':'')+'\n\n用户任务：\n'+run.workflow.task+'\n\n你的职责：\n'+definition.prompt+(parents?'\n\n'+parents:'')+'\n\n你在隔离的分支工作目录：'+node.workspace+'。其他 AI 可能同时工作；只修改自己负责的文件，不修改用户其他目录。上游文件已经合并到此目录，交接元数据在 .canvas-collaboration/handoff.json。保留上游内容，给出文件、接口契约与下游注意事项。'+repositoryInstructions+conflictInstructions+repairInstructions;
+    const prompt='你是自托管引擎派发的执行分支，接入已完成；直接在本次隔离目录完成给定职责。协作分工通过本次 plan.json 交给引擎派发。'+(collaborationInstructions?collaborationInstructions+'\n\n':'')+'\n\n用户任务：\n'+run.workflow.task+'\n\n你的职责：\n'+definition.prompt+(parents?'\n\n'+parents:'')+'\n\n你在隔离的分支工作目录：'+node.workspace+'。其他 AI 可能同时工作；只修改自己负责的文件，不修改用户其他目录。上游文件已经合并到此目录，交接元数据在 .canvas-collaboration/handoff.json。保留上游内容，给出文件、接口契约与下游注意事项。'+repositoryInstructions+conflictInstructions+repairInstructions+deliveryInstructions;
     this.log(id,node.id,'正在并行提交至 '+(node.profileLabel||node.profileId)+'。');node.submittedAt??=new Date().toISOString();this.patchNode(id,node);
     try{node.handle=await startConversation({...config,workspace:node.workspace},{conversationId:node.conversationId,prompt,system:run.workflow.coordinationPolicy==='lean'?'你是引擎调度的执行分支，在当前目录直接完成给定职责；协作分工通过本次 plan.json 交给引擎派发。优先实现需求，说明简短，必要验证一次。':definition.prompt,model:definition.liveModel,temperature:definition.temperature,tools:definition.tools,repository:run.workflow.repository,branch:run.workflow.branch,maxIterations:run.workflow.maxIterations})}
     catch(error){let recovered;try{recovered=await conversation(config,node.conversationId)}catch{}if(recovered)node.handle={kind:'conversation',id:recovered.id,conversationId:recovered.id};else throw error}
@@ -286,7 +291,8 @@ export class Engine extends SerialEngine {
   const leaves=run.order.filter(id=>!Object.values(run.nodes).some(n=>n.dependencies.includes(id)));let path;
   if(leaves.length===1)path=await this.archiveFor(run,run.nodes[leaves[0]]);
   else{const merged=await this.inputFor(run,{id:'final-delivery',dependencies:leaves});if(merged.report.conflicts.length)throw new ApiError('最终分支仍有文件冲突，请在画布增加整合节点后重新运行。',409);path=merged.path}
-  if(this.closed)return;const folder=join(this.handoffDirectory,'artifacts');await mkdir(folder,{recursive:true,mode:0o700});await copyFile(path,join(folder,run.id+'.tar.gz'));if(this.closed)return;
+  if(this.closed)return;const checked=await validateDelivery(this,run,path,leaves);if(checked?.repairPrepared||checked?.pending)return checked;if(this.store.run(run.id).cancelRequested)return {pending:true};
+  const folder=join(this.handoffDirectory,'artifacts');await mkdir(folder,{recursive:true,mode:0o700});await copyFile(path,join(folder,run.id+'.tar.gz'));if(this.closed)return;if(this.store.run(run.id).cancelRequested)return {pending:true};
   this.patch(run.id,r=>{r.status='succeeded';r.error=null;r.completedCount=r.order.length;r.index=r.order.length;r.activeNodeIds=[];r.finishedAt=new Date().toISOString()});this.log(run.id,'workflow','全部分支已完成并汇合，交付文件已保存。',{success:true});
  }
 }
