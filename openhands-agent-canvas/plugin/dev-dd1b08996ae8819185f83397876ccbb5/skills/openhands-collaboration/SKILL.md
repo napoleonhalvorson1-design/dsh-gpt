@@ -151,3 +151,7 @@ DeepSeek 阶段等待较长时，用 canvas_run_status 的 view=trace、nodeId�
 ## 依赖路径优先（5.25 / 插件 2.22）
 
 新自主协作运行优先让剩余依赖路径较长的就绪阶段占空闲槽；负责人可选填 estimatedSeconds（1–7200 整数秒，非预算），仍自行选择分工、模型和深度。估计及来源随计划冻结在 run.scheduling，续跑不重估，未知耗时保持 null；桶屏障和模型调用次数不变。历史/固定运行沿用原顺序。见 [调度说明](references/critical-path.md)。
+
+## 指定检查的定点修复（5.26 / 插件 2.23）
+
+实际需求需要最终命令时，先确认网站至少 5.26，再通过项目或单次 start 的 deliveryValidation={command,timeoutSeconds:60,autoRepair:true} 配置；CLI 使用 --validation-file。不例行增加检查或审查 AI。完整成果先过 SHA/桶屏障，再在独立目录执行；依赖准备写进命令。确认失败才交给原已验证强负责人定点修复一次，保留模型/深度和已有成果，然后重跑同一检查；再次失败停止。明确继续可再修一次。连接异常和回执不确定不触发修复或盲目重放；桶错误只恢复保存。查看 run.deliveryCheck 的实际回执、来源与计数，不能把模型 finished 或文件非空当成指定检查通过。见 [交付检查](references/delivery-validation.md)。

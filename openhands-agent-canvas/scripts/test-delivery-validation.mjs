@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {validateDeliveryValidation} from '../shared/delivery-validation.mjs';
+import {validateWorkflow} from '../server/engine.mjs';
+import {validationConfig} from '../server/delivery-validation.mjs';
+assert.equal(validateDeliveryValidation(),undefined);
+assert.deepEqual(validateDeliveryValidation({command:' node contract.mjs '}),{command:'node contract.mjs',timeoutSeconds:60,autoRepair:true});
+assert.deepEqual(validateDeliveryValidation({command:'npm test',timeoutSeconds:5,autoRepair:false}),{command:'npm test',timeoutSeconds:5,autoRepair:false});
+for(const value of [null,[],{},'npm test',{command:''},{command:'x\0y'},{command:'x'.repeat(4001)},{command:'x',timeoutSeconds:4},{command:'x',timeoutSeconds:301},{command:'x',timeoutSeconds:1.5},{command:'x',timeoutSeconds:'30'},{command:'x',autoRepair:1},{command:'x',secret:'not-allowed'}])assert.throws(()=>validateDeliveryValidation(value));
+const flow={title:'check',task:'task',deliveryValidation:{command:'npm test'},nodes:[{id:'start',type:'start',name:'s',x:0,y:0},{id:'a',type:'code',name:'a',x:0,y:0},{id:'end',type:'end',name:'e',x:0,y:0}],edges:[['start','a'],['a','end']]};
+const before=JSON.stringify(flow),normalized=validateWorkflow(flow);assert.equal(normalized.deliveryValidation.timeoutSeconds,60);assert.equal(JSON.stringify(flow),before);
+assert.throws(()=>validationConfig(normalized,{}),/强规划负责人/);
+assert.equal(validationConfig({...normalized,deliveryValidation:{...normalized.deliveryValidation,autoRepair:false}},{}).policy.autoRepair,false);
+const bundle={nodeConfigs:{plan:{selection:{planner:true,verified:true}}}},frozen=validationConfig(normalized,bundle);normalized.deliveryValidation.command='changed';assert.equal(frozen.policy.command,'npm test');assert.equal(frozen.autoRepairCount,0);
+assert.throws(()=>validateWorkflow({...flow,nodes:flow.nodes.map(n=>n.id==='a'?{...n,id:'_canvas_delivery_repair'}:n)}),/保留/);
+console.log('Passed opt-in check schema, immutable normalization, strongest-repair capability gate and reserved IDs.');

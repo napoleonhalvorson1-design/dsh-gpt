@@ -24,6 +24,10 @@ try{
  const invalidAttempt={...interruptedAttempt,conversationId:'rejected-planner',finishedAt:'2026-01-01T00:00:03Z',outcome:'invalid-plan'};
  add('corrected-planner',{...node,conversationId:'corrected-planner',modelUsage:null,modelSelection:{complexity:'standard'},attempts:[invalidAttempt]},'succeeded',{adaptivePlan:{plannerId:'build',directDelivery:true}});
  const repairedHistory=executionHistory(store,team).find(g=>g.role==='planning'&&g.complexity==='standard');assert.equal(repairedHistory.invalidPlanSamples,1);assert.equal(repairedHistory.interruptedSamples,1,'Completed invalid planning is not another interrupted wait');
+ const positiveCount=executionHistory(store,team).find(g=>g.role==='implementation'&&g.complexity==='unknown').samples;
+ add('check-failed-code',{...node,conversationId:'check-failed-code',modelUsage:null},'failed',{deliveryCheck:{version:1,current:{status:'failed'},attempts:[]}});
+ add('check-repaired-old-leaf',{...node,conversationId:'check-repaired-old-leaf',modelUsage:null},'succeeded',{deliveryCheck:{version:1,current:{status:'passed'},attempts:[{status:'failed',sourceNodeIds:['build']}]}});
+ assert.equal(executionHistory(store,team).find(g=>g.role==='implementation'&&g.complexity==='unknown').samples,positiveCount,'Rejected artifacts are not successful timing samples even after another node repairs them');
  assert.deepEqual(executionHistory(store,{}),[]);
  console.log('Passed bound verified-model observations, completed snapshot filtering, duplicate request exclusion, partial-run samples and unknown token preservation.');
 }finally{store.close();await rm(dir,{recursive:true,force:true})}

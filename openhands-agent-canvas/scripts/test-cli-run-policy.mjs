@@ -59,7 +59,9 @@ try {
     });
   }
   const start = ['runs', 'start', '--project', 'fixture', '--id', 'fixture-run'];
+  const validationFile=join(temp,'check.json');await writeFile(validationFile,JSON.stringify({command:'node contract.mjs',autoRepair:true}));
   const cases = [
+    {args:['--validation-file',validationFile],overrides:{deliveryValidation:{command:'node contract.mjs',autoRepair:true}}},
     ...['auto', 'simple', 'standard', 'complex'].map(value => ({
       args: ['--complexity', value], overrides: {taskComplexity: value},
     })),
@@ -97,6 +99,7 @@ try {
     assert.match(JSON.parse(result.stdout).error, /--(?:planning-)?complexity/);
     assert.equal(requests.length, before, 'Invalid complexity must fail before submitting');
   }
+  for(const args of [['--validation-file'],['--validation-file',''],['--validation-file','--effort','high']]){const count=requests.length;const bad=await run([...start,...args]);assert.equal(bad.code,1);assert.equal(requests.length,count);assert.match(JSON.parse(bad.stdout).error,/validation-file/)}
   const trace=await run(['runs','trace','--id','fixture-run','--node','build']);assert.equal(trace.code,0);assert.equal(requests.at(-1).path,'/api/runs/fixture-run/trace?nodeId=build');assert.equal(requests.at(-1).auth,`Bearer ${token}`);
   const help = await run(['help']);
   assert.equal(help.code, 0);
