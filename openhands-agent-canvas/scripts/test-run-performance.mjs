@@ -109,3 +109,11 @@ assert.deepEqual(input, original);
 assert.equal(/SECRET|PRIVATE|CONTENT/.test(JSON.stringify(result)), false);
 assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
 console.log('run-performance: all assertions passed');
+
+const streamedTiming=analyzeRun(run({plan:node(0,80,{planCommitted:true}),_canvas_coordinator_result:node(80,80,{artifactOnly:true}),worker:node(25,70,{dependencies:['plan']}),check:node(85,95,{dependencies:['worker','_canvas_coordinator_result']})}));
+const committedTiming=analyzeRun({...run({plan:node(0,80,{planCommitted:true}),_canvas_coordinator_result:node(80,80,{artifactOnly:true}),worker:node(25,70,{dependencies:['plan']}),check:node(85,95,{dependencies:['worker','_canvas_coordinator_result']})}),streamingPlan:{committedAt:20}});
+assert.equal(committedTiming.nodes.length,3);
+assert.equal(committedTiming.nodes.find(n=>n.id==='worker').queueMs,5);
+assert.equal(committedTiming.nodes.find(n=>n.id==='check').queueMs,5);
+assert.equal(committedTiming.observedPeakModels,2);
+assert.equal(streamedTiming.nodes.find(n=>n.id==='worker').queueMs,null);

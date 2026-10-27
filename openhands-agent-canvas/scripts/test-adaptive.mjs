@@ -20,3 +20,16 @@ console.log('Manual/legacy entry defaults remain addressable without advertising
 
 for(const value of [null,0,-1,1.5,7201,"30",Infinity])assert.throws(()=>compileAdaptivePlan({...plan,stages:[{...stage("work","build"),estimatedSeconds:value}]},lean,bundle),/预计耗时/);
 for(const value of [1,7200])assert.equal(compileAdaptivePlan({...plan,stages:[{...stage("work","build"),estimatedSeconds:value}]},lean,bundle).stages[0].estimatedSeconds,value);
+
+const streamed={...one,deliveryMode:'streamed',coordinator:{prompt:'Implement the shared service'},stages:[stage('worker','build'),stage('check','verify',['worker'])]},earlyRun={...lean,streamPlanVersion:1,streamingPlan:{checkpoint:{sha256:'a'.repeat(64)}}},earlyPlan=compileAdaptivePlan(streamed,earlyRun,bundle);
+assert(earlyPlan.summary.earlyCoordinator&&earlyPlan.summary.coordinatorImplemented);
+assert(earlyPlan.workflow.nodes.find(n=>n.id==='_canvas_coordinator_result').artifactOnly);
+assert(earlyPlan.workflow.edges.some(([a,b])=>a==='_canvas_coordinator_result'&&b==='check'));
+assert.equal(earlyPlan.workflow.nodes.find(n=>n.id==='plan').prompt,streamed.coordinator.prompt);
+assert.throws(()=>compileAdaptivePlan(streamed,lean,bundle),/提前交接/);
+assert.throws(()=>compileAdaptivePlan({...streamed,coordinator:{}},earlyRun,bundle),/提前交接/);
+assert(!compileAdaptivePlan(streamed,{...lean,streamPlanVersion:1},bundle).workflow.nodes.some(n=>n.artifactOnly));
+assert.throws(()=>validateWorkflow(earlyPlan.workflow),/引擎保留/);
+assert(planningInstructions(bundle.teamProfiles,{...seed,streamingPlanEnabled:true}).includes('plan-commit.json'));
+assert(!instructions.includes('plan-commit.json'));
+console.log('STREAMED PLAN QA PASSED: optional capability, immutable coordinator responsibility, final-check barrier, no synthetic inference, and legacy fallback.');

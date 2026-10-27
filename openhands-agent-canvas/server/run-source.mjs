@@ -19,7 +19,7 @@ export function pinRunSource(store,storage,{id,projectId},flow){
  if(!source||source.projectId!==projectId)throw new ApiError('开发基线须为本项目的已有运行。',409);
  if(source.status!=='succeeded')throw new ApiError('请使用已经成功交付的运行作为开发基线；未完成任务使用继续。',409);
  if(!storage?.config().enabled)throw new ApiError('继承上轮成果需要已配置的对象存储。',409);
- function checkpoint(node){const cp=node?.checkpoint;if(!cp||cp.runId!==source.id||cp.nodeId!==node.id||cp.conversationId!==node.conversationId||!/^[a-f0-9]{64}$/.test(cp.sha256||'')||!Number.isSafeInteger(cp.size)||cp.size<=0||cp.size>128*1024*1024)throw new ApiError('上轮成果缺少有效的已入桶阶段快照。',409);return structuredClone(cp)}
+ function checkpoint(node){if(node?.artifactOnly){if(node.sourceNodeId!=='plan'||!source.streamingPlan?.checkpoint||node.checkpoint?.sha256!==nodes.plan?.checkpoint?.sha256)throw new ApiError('负责人文件引用无效。',409);node=nodes.plan}const cp=node?.checkpoint;if(!cp||cp.runId!==source.id||cp.nodeId!==node.id||cp.conversationId!==node.conversationId||!/^[a-f0-9]{64}$/.test(cp.sha256||'')||!Number.isSafeInteger(cp.size)||cp.size<=0||cp.size>128*1024*1024)throw new ApiError('上轮成果缺少有效的已入桶阶段快照。',409);return structuredClone(cp)}
  const order=source.order||[],nodes=source.nodes||{};
  if(!order.length||order.some(id=>nodes[id]?.status!=='succeeded'||source.schedulerVersion===2&&nodes[id]?.outputReady!==true))throw new ApiError('上轮阶段尚未全部通过文件存储屏障。',409);
  const ancestors=(id,seen=new Set())=>{if(seen.has(id)||!nodes[id])throw new ApiError('上轮依赖记录无效。',409);const next=new Set(seen).add(id),out=new Set([id]);for(const p of nodes[id].dependencies||[])for(const a of ancestors(p,next))out.add(a);return out};
@@ -29,7 +29,7 @@ export function pinRunSource(store,storage,{id,projectId},flow){
  if(maximal.length>1)throw new ApiError('上轮汇合缺少唯一文件基线。',409);
  const parents=leaves.map(id=>({id,checkpoint:checkpoint(nodes[id])}));
  let base=null;
- if(leaves.length>1){if(maximal[0])base={id:maximal[0],checkpoint:checkpoint(nodes[maximal[0]])};else if(source.workflow?.baseRunId||source.workflow?.repository){const cp=source.artifactSource?.checkpoint||source.repositorySource?.checkpoint;if(!cp)throw new ApiError('上轮源代码基线快照缺失。',409);base={id:'source',checkpoint:structuredClone(cp)}}}
+ if(leaves.length>1){if(maximal[0])base=maximal[0]==='plan'&&source.streamingPlan?.checkpoint?{id:'committed-plan',checkpoint:structuredClone(source.streamingPlan.checkpoint)}:{id:maximal[0],checkpoint:checkpoint(nodes[maximal[0]])};else if(source.workflow?.baseRunId||source.workflow?.repository){const cp=source.artifactSource?.checkpoint||source.repositorySource?.checkpoint;if(!cp)throw new ApiError('上轮源代码基线快照缺失。',409);base={id:'source',checkpoint:structuredClone(cp)}}}
  return {sourceRunId:source.id,sourceProjectId:source.projectId,parents,base,status:'pinned',pinnedAt:new Date().toISOString()};
 }
 

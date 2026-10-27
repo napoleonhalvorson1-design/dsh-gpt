@@ -155,3 +155,7 @@ DeepSeek 阶段等待较长时，用 canvas_run_status 的 view=trace、nodeId�
 ## 指定检查的定点修复（5.26 / 插件 2.23）
 
 实际需求需要最终命令时，先确认网站至少 5.26，再通过项目或单次 start 的 deliveryValidation={command,timeoutSeconds:60,autoRepair:true} 配置；CLI 使用 --validation-file。不例行增加检查或审查 AI。完整成果先过 SHA/桶屏障，再在独立目录执行；依赖准备写进命令。确认失败才交给原已验证强负责人定点修复一次，保留模型/深度和已有成果，然后重跑同一检查；再次失败停止。明确继续可再修一次。连接异常和回执不确定不触发修复或盲目重放；桶错误只恢复保存。查看 run.deliveryCheck 的实际回执、来源与计数，不能把模型 finished 或文件非空当成指定检查通过。见 [交付检查](references/delivery-validation.md)。
+
+## 负责人和分支并行实现（5.27 / 插件 2.24）
+
+新的 strongest 自主运行在入口支持时允许负责人提前冻结计划与接口并写入数据桶，然后在同一会话继续实现自己的文件；独立 AI 可提前开工。由负责人决定是否使用，不强制分工或额外模型调用。run.streamingPlan 表示实际冻结成功，plan.planCommitted 不代表负责人已完成；最终测试和交付仍等全部代码与桶屏障。负责人文件结果节点 artifactOnly=true 仅引用已有成果，不是新 AI。停止、续跑及增量开发仍处理实际会话与完整文件。见 [提前交接](references/streamed-plan.md)。
